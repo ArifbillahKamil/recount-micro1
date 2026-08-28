@@ -25,6 +25,7 @@ without raising an error:
 
 from __future__ import annotations
 
+import hashlib
 import random
 import sqlite3
 from dataclasses import dataclass
@@ -399,6 +400,59 @@ def ddl() -> str:
     return SCHEMA.strip()
 
 
+# Digest of the generated data, used to confirm two machines built the same
+# warehouse before their numbers are compared.
+CONTENT_DIGEST = "7e5f85250ade5358"
+
+
+def content_digest(db_path: str | Path) -> str:
+    """SHA-256 over the logical contents, independent of file layout.
+
+    Hashing the ``.db`` file itself was the obvious thing to do and it was wrong.
+    SQLite's on-disk layout depends on the library version -- page size defaults,
+    freelist handling, b-tree packing -- so two machines that generate byte-for-
+    byte identical *data* still produce different *files*. That check failed for
+    anyone whose SQLite differed from the author's, while reporting the alarming
+    and untrue message that their data was different.
+
+    This reads every row of every table in a fully determined order and hashes
+    the values, so it depends only on the data. Rows are ordered by all columns
+    rather than by primary key, so tables without a usable key still compare
+    deterministically.
+    """
+    digest = hashlib.sha256()
+    uri = f"file:{Path(db_path).as_posix()}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    try:
+        tables = [
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            )
+        ]
+        for table in tables:
+            quoted = '"' + table.replace('"', '""') + '"'
+            columns = [
+                row[1] for row in conn.execute(f"PRAGMA table_info({quoted})")
+            ]
+            column_list = ", ".join('"' + c.replace('"', '""') + '"' for c in columns)
+            digest.update(f"TABLE {table}\n".encode("utf-8"))
+            digest.update((",".join(columns) + "\n").encode("utf-8"))
+            for row in conn.execute(
+                f"SELECT {column_list} FROM {quoted} ORDER BY {column_list}"
+            ):
+                digest.update(
+                    "\x1f".join(
+                        "\x00" if value is None else str(value) for value in row
+                    ).encode("utf-8")
+                )
+                digest.update(b"\x1e")
+    finally:
+        conn.close()
+    return digest.hexdigest()[:16]
+
+
 if __name__ == "__main__":  # pragma: no cover
     import argparse
     import json
@@ -406,7 +460,27 @@ if __name__ == "__main__":  # pragma: no cover
     parser = argparse.ArgumentParser(description="Build the synthetic warehouse.")
     parser.add_argument("--db", default="data/warehouse.db")
     parser.add_argument("--seed", type=int, default=20260828)
+    parser.add_argument(
+        "--digest-only",
+        action="store_true",
+        help="print the content digest of an existing warehouse and exit",
+    )
     args = parser.parse_args()
+
+    if args.digest_only:
+        print(content_digest(args.db))
+        raise SystemExit(0)
 
     stats = build(args.db, seed=args.seed)
     print(json.dumps(stats.as_dict(), indent=2))
+
+    digest = content_digest(args.db)
+    print(f"\ncontent digest: {digest}")
+    if args.seed == 20260828:
+        if digest == CONTENT_DIGEST:
+            print("matches the published digest -- your data is identical")
+        else:
+            print(
+                f"WARNING does not match the published digest {CONTENT_DIGEST}.\n"
+                "Numbers built on this warehouse will not be comparable."
+            )

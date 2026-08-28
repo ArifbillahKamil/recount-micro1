@@ -281,8 +281,8 @@ cd recount-micro1
 python run_all.py --dry-run
 ```
 
-Expected: warehouse hash `e88b616e59d41104`, `12 cases validated: 8 BUG /
-4 CLEAN`, and `28 passed, 0 failed` / `31 passed, 0 failed`.
+Expected: content digest `7e5f85250ade5358`, `12 cases validated: 8 BUG /
+4 CLEAN`, and `32 passed, 0 failed` / `31 passed, 0 failed`.
 
 Then, with a key:
 
@@ -309,7 +309,7 @@ recount/
   evaluate.py    the harness, plus the three ablations
   report.py      the artifact an analyst receives
   cli.py         verify one query
-tests/           59 checks, scripted model, no API calls
+tests/           63 checks, scripted model, no API calls
 ```
 
 ## Safety

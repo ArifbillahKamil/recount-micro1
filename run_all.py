@@ -22,7 +22,6 @@ Use --dry-run to check everything works before spending anything.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import subprocess
 import sys
@@ -30,7 +29,6 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PY = sys.executable or "python3"
-EXPECTED_DB_SHA = "e88b616e59d41104"
 
 
 def banner(step: str, total: int, title: str) -> None:
@@ -54,16 +52,28 @@ def run(args: list, tail: int = 0) -> str:
     return output
 
 
-def check_db_hash() -> None:
-    db = HERE / "data" / "warehouse.db"
-    digest = hashlib.sha256(db.read_bytes()).hexdigest()[:16]
-    print(f"  warehouse sha256[:16] = {digest}")
-    if digest != EXPECTED_DB_SHA:
+def check_warehouse() -> None:
+    """Confirm the generated data matches, by content rather than by file bytes.
+
+    Deliberately not a hash of the .db file: SQLite's on-disk layout varies with
+    the library version, so that check fails across machines whose data is in
+    fact identical.
+    """
+    sys.path.insert(0, str(HERE))
+    from recount import warehouse
+
+    digest = warehouse.content_digest(HERE / "data" / "warehouse.db")
+    print(f"  content digest = {digest}")
+    if digest != warehouse.CONTENT_DIGEST:
         raise SystemExit(
-            f"  MISMATCH: expected {EXPECTED_DB_SHA}.\n"
-            "  Stop here. Your data differs, so no number will be comparable."
+            f"  MISMATCH: expected {warehouse.CONTENT_DIGEST}\n\n"
+            "  The generated data differs, so results would not be comparable.\n"
+            "  This should not happen with an unmodified checkout. Check that:\n"
+            "    - recount/warehouse.py is unmodified (git status)\n"
+            "    - you did not pass a custom --seed\n"
+            "  Then report the digest above along with your Python version."
         )
-    print("  matches the published hash -- your data is identical to ours\n")
+    print("  matches the published digest -- your data is identical\n")
 
 
 def main() -> int:
@@ -87,7 +97,7 @@ def main() -> int:
 
     banner(1, total, "Build the warehouse (deterministic, seeded)")
     run([PY, "-m", "recount.warehouse", "--db", "data/warehouse.db"])
-    check_db_hash()
+    check_warehouse()
 
     banner(2, total, "Validate the eval set against the data")
     run([PY, "-m", "recount.cases", "--db", "data/warehouse.db"], tail=4)

@@ -42,17 +42,30 @@ Expected output:
 }
 ```
 
-The data is synthetic and generated from a fixed seed, so the file is
-byte-identical on every machine. Confirm:
+The build prints a content digest and checks it for you:
 
-```bash
-python3 -c "
-import hashlib
-print(hashlib.sha256(open('data/warehouse.db','rb').read()).hexdigest()[:16])"
-# e88b616e59d41104
+```
+content digest: 7e5f85250ade5358
+matches the published digest -- your data is identical
 ```
 
-If that hash differs, stop — every downstream number depends on it.
+You can re-check an existing warehouse at any time:
+
+```bash
+python3 -m recount.warehouse --db data/warehouse.db --digest-only
+# 7e5f85250ade5358
+```
+
+If that digest differs, stop — every downstream number depends on it.
+
+**Why a content digest and not a hash of the `.db` file.** Hashing the file was
+the first thing this guide did, and it was wrong. SQLite's on-disk layout depends
+on the library version, so two machines that generate byte-for-byte identical
+*data* still produce different *files*. The file hash therefore failed for anyone
+whose SQLite differed from the author's, while reporting that their data was
+different — which was untrue and alarming. The digest reads every row of every
+table in a determined order and hashes the values, so it depends on the data
+alone.
 
 ## 2. Confirm the ground truth is real
 

@@ -411,6 +411,48 @@ def test_destructive_probe_is_blocked_and_reported() -> None:
     check("the blocked probe is recorded in the trace", len(blocked) >= 1, str(len(blocked)))
 
 
+def test_warehouse_digest_is_content_based_not_file_based() -> None:
+    """Two builds must agree on content, and the digest must not read file bytes.
+
+    Regression test for a real defect: the original check hashed the .db file,
+    which varies with the SQLite library version, so it reported "your data
+    differs" on machines whose data was identical.
+    """
+    import hashlib
+    import tempfile as _tempfile
+
+    tmp = Path(_tempfile.mkdtemp(prefix="recount-digest-"))
+    first, second = str(tmp / "one.db"), str(tmp / "two.db")
+    warehouse.build(first)
+    warehouse.build(second)
+
+    d1 = warehouse.content_digest(first)
+    d2 = warehouse.content_digest(second)
+    check("content digest is stable across builds", d1 == d2, f"{d1} vs {d2}")
+    check(
+        "content digest matches the published constant",
+        d1 == warehouse.CONTENT_DIGEST,
+        f"{d1} vs {warehouse.CONTENT_DIGEST}",
+    )
+
+    file_hash = hashlib.sha256(Path(first).read_bytes()).hexdigest()[:16]
+    check(
+        "the digest is not merely the file hash",
+        d1 != file_hash,
+        "digest coincides with the file hash, so it may still be layout-dependent",
+    )
+
+    # A single changed value must move the digest, or it proves nothing.
+    conn = __import__("sqlite3").connect(second)
+    conn.execute("UPDATE orders SET status = 'cancelled' WHERE order_id = 1")
+    conn.commit()
+    conn.close()
+    check(
+        "digest detects a single altered row",
+        warehouse.content_digest(second) != d2,
+    )
+
+
 def test_trace_renders_markdown() -> None:
     case = cases.by_id("B1_fanout_payments_via_line_items")
     _, trace, _ = run(
@@ -446,6 +488,7 @@ TESTS = [
     test_profile_ablation_falls_back_to_schema_only,
     test_probe_ablation_skips_planning,
     test_destructive_probe_is_blocked_and_reported,
+    test_warehouse_digest_is_content_based_not_file_based,
     test_trace_renders_markdown,
 ]
 

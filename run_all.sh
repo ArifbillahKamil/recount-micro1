@@ -38,13 +38,15 @@ fi
 step "1/7  Build the warehouse (deterministic, seeded)"
 python3 -m recount.warehouse --db data/warehouse.db
 python3 - <<'PY'
-import hashlib
-digest = hashlib.sha256(open("data/warehouse.db", "rb").read()).hexdigest()[:16]
-expected = "e88b616e59d41104"
-print(f"  sha256[:16] = {digest}")
-if digest != expected:
-    raise SystemExit(f"  MISMATCH: expected {expected}. Stop; results will not compare.")
-print("  matches the published hash")
+from recount import warehouse
+digest = warehouse.content_digest("data/warehouse.db")
+print(f"  content digest = {digest}")
+if digest != warehouse.CONTENT_DIGEST:
+    raise SystemExit(
+        f"  MISMATCH: expected {warehouse.CONTENT_DIGEST}. "
+        "Stop; results would not be comparable."
+    )
+print("  matches the published digest")
 PY
 
 step "2/7  Validate the eval set against the data"
