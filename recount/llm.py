@@ -42,9 +42,12 @@ API_URL = "https://api.openai.com/v1/chat/completions"
 #
 # Run `python -m recount.llm --list-models` to see what your key can reach, and
 # confirm rates at https://openai.com/api/pricing before quoting a cost.
+# (input, output) or (input, output, cached_input), USD per 1M tokens.
 PRICING = {
-    # Verify before use. Sourced from openai.com/api/pricing listings and a
-    # report of the 2026-07-30 price change; treated as unconfirmed.
+    # Read from openai.com/api/pricing on 2026-08-28.
+    "gpt-5.6-luna": (0.20, 1.20, 0.02),
+    # Verify before use; sourced from pricing-page listings and a report of the
+    # 2026-07-30 price change. Treated as unconfirmed.
     "gpt-5.4": (2.50, 15.00),
     "gpt-5.4-mini": (0.75, 4.50),
     # Older generations, kept for anyone still pinned to them.
@@ -54,6 +57,13 @@ PRICING = {
     "gpt-4.1-nano": (0.10, 0.40),
     "gpt-4.1": (2.00, 8.00),
 }
+
+# A reasoning model bills thinking against max_completion_tokens, so a ceiling
+# sized for a plain chat model can be consumed entirely before any content is
+# produced. When that happens the ceiling is raised by this factor and retried.
+EMPTY_RESPONSE_SCALE = 6
+MAX_EMPTY_RETRIES = 2
+MAX_COMPLETION_CEILING = 32000
 
 MODE_AUTO = "auto"
 MODE_RECORD = "record"
@@ -146,6 +156,7 @@ class LLMClient:
         timeout_s: float = 90.0,
         price_in: Optional[float] = None,
         price_out: Optional[float] = None,
+        price_cached: Optional[float] = None,
     ) -> None:
         if mode not in (MODE_AUTO, MODE_RECORD, MODE_REPLAY):
             raise ValueError(f"unknown mode: {mode}")
@@ -158,14 +169,20 @@ class LLMClient:
         self.timeout_s = timeout_s
         self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
 
-        table_in, table_out = PRICING.get(model, (None, None))
+        entry = PRICING.get(model) or (None, None)
+        table_in, table_out = entry[0], entry[1]
+        table_cached = entry[2] if len(entry) > 2 else None
         self.price_in = price_in if price_in is not None else table_in
         self.price_out = price_out if price_out is not None else table_out
+        self.price_cached = price_cached if price_cached is not None else table_cached
         self.pricing_known = self.price_in is not None and self.price_out is not None
 
         self.cassette_dir.mkdir(parents=True, exist_ok=True)
         self.stats = {"hits": 0, "misses": 0, "live_calls": 0, "cost_usd": 0.0}
         self._compat: set = set()
+        # Raised once a model is observed to spend its whole ceiling on
+        # reasoning, so later calls start with a workable budget.
+        self._token_scale = 1
 
     # -- keys and storage --------------------------------------------------
     def _request_body(
@@ -214,11 +231,26 @@ class LLMClient:
         )
 
     # -- cost --------------------------------------------------------------
-    def _cost(self, prompt_tokens: int, completion_tokens: int) -> Optional[float]:
+    def _cost(
+        self,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cached_tokens: int = 0,
+    ) -> Optional[float]:
+        """Cost in USD, billing cached prompt tokens at their own rate.
+
+        Providers discount prompt tokens they served from cache, often by an
+        order of magnitude. Charging them at full rate would overstate cost, so
+        they are split out when the response reports them and a cached rate is
+        known.
+        """
         if not self.pricing_known:
             return None
+        billed_full = max(prompt_tokens - cached_tokens, 0)
+        cached_rate = self.price_cached if self.price_cached is not None else self.price_in
         return (
-            prompt_tokens * self.price_in / 1_000_000.0
+            billed_full * self.price_in / 1_000_000.0
+            + cached_tokens * cached_rate / 1_000_000.0
             + completion_tokens * self.price_out / 1_000_000.0
         )
 
@@ -226,10 +258,17 @@ class LLMClient:
         raw = response.get("usage") or {}
         prompt_tokens = int(raw.get("prompt_tokens", 0))
         completion_tokens = int(raw.get("completion_tokens", 0))
-        cost = self._cost(prompt_tokens, completion_tokens)
+        details = raw.get("prompt_tokens_details") or {}
+        cached_tokens = int(details.get("cached_tokens", 0) or 0)
+        reasoning = (raw.get("completion_tokens_details") or {}).get(
+            "reasoning_tokens", 0
+        )
+        cost = self._cost(prompt_tokens, completion_tokens, cached_tokens)
         return {
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
+            "cached_prompt_tokens": cached_tokens,
+            "reasoning_tokens": int(reasoning or 0),
             "total_tokens": prompt_tokens + completion_tokens,
             "cost_usd": round(cost, 8) if cost is not None else 0.0,
             "cost_known": cost is not None,
@@ -323,6 +362,42 @@ class LLMClient:
         raise LLMError(f"request failed after {self.max_retries} attempts: {last_error}")
 
     # -- public API --------------------------------------------------------
+    def _fetch(
+        self, messages: list, budget: int, json_mode: bool, step: str
+    ) -> tuple:
+        """One request, served from a cassette when possible."""
+        body = self._request_body(messages, budget, json_mode)
+        key = self.cassette_key(body)
+
+        record = None
+        if self.mode in (MODE_AUTO, MODE_REPLAY):
+            record = self._load(key)
+
+        if record is not None:
+            self.stats["hits"] += 1
+            return record["response"], True, key
+
+        self.stats["misses"] += 1
+        if self.mode == MODE_REPLAY:
+            raise CassetteMiss(
+                f"no cassette for step '{step}' (key {key}).\n"
+                "Offline replay cannot invent a response. Re-record with "
+                "an API key, or check that prompts match the recorded run."
+            )
+        response = self._post(body)
+        self.stats["live_calls"] += 1
+        self._save(key, body, response, step)
+        return response, False, key
+
+    @staticmethod
+    def _content_and_finish(response: dict) -> tuple:
+        try:
+            choice = response["choices"][0]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LLMError(f"unexpected response shape: {str(response)[:300]}") from exc
+        message = choice.get("message") or {}
+        return (message.get("content") or ""), choice.get("finish_reason")
+
     def chat(
         self,
         messages: list,
@@ -332,39 +407,55 @@ class LLMClient:
         json_mode: bool = True,
         trace=None,
     ) -> LLMResponse:
-        body = self._request_body(messages, max_tokens, json_mode)
-        key = self.cassette_key(body)
-
         started = time.time()
-        cached = False
-        record = None
+        budget = min(max_tokens * self._token_scale, MAX_COMPLETION_CEILING)
+        attempts = 0
 
-        if self.mode in (MODE_AUTO, MODE_REPLAY):
-            record = self._load(key)
+        while True:
+            response, cached, key = self._fetch(messages, budget, json_mode, step)
+            text, finish_reason = self._content_and_finish(response)
 
-        if record is not None:
-            cached = True
-            self.stats["hits"] += 1
-            response = record["response"]
-        else:
-            self.stats["misses"] += 1
-            if self.mode == MODE_REPLAY:
-                raise CassetteMiss(
-                    f"no cassette for step '{step}' (key {key}).\n"
-                    "Offline replay cannot invent a response. Re-record with "
-                    "an API key, or check that prompts match the recorded run."
+            if text.strip():
+                break
+            # An empty body is not a refusal; on a reasoning model it usually
+            # means the whole ceiling went on thinking. Raise it and retry, and
+            # remember the larger scale so later calls do not repeat the waste.
+            if (
+                cached
+                or self.mode == MODE_REPLAY
+                or attempts >= MAX_EMPTY_RETRIES
+                or budget >= MAX_COMPLETION_CEILING
+            ):
+                break
+            attempts += 1
+            self._token_scale = max(
+                self._token_scale * EMPTY_RESPONSE_SCALE, EMPTY_RESPONSE_SCALE
+            )
+            new_budget = min(max_tokens * self._token_scale, MAX_COMPLETION_CEILING)
+            usage = self._usage_from(response)
+            if trace is not None:
+                trace.add_note(
+                    "token_budget",
+                    f"Empty response at a {budget}-token ceiling "
+                    f"(finish_reason={finish_reason}, "
+                    f"{usage['reasoning_tokens']} reasoning tokens). "
+                    f"Retrying at {new_budget}.",
                 )
-            response = self._post(body)
-            self.stats["live_calls"] += 1
-            self._save(key, body, response, step)
+            budget = new_budget
 
         latency = time.time() - started
-        try:
-            text = response["choices"][0]["message"]["content"] or ""
-        except (KeyError, IndexError, TypeError) as exc:
-            raise LLMError(f"unexpected response shape: {str(response)[:300]}") from exc
-
         usage = self._usage_from(response)
+
+        if not text.strip():
+            raise LLMError(
+                f"the model returned no content for step '{step}' "
+                f"(finish_reason={finish_reason}, ceiling {budget} tokens, "
+                f"{usage['reasoning_tokens']} reasoning tokens).\n"
+                f"'{self.model}' appears to bill reasoning against the "
+                "completion ceiling and exhausted it before writing an answer. "
+                "Either pick a model that reserves budget for output, or raise "
+                "MAX_COMPLETION_CEILING in recount/llm.py."
+            )
         self.stats["cost_usd"] += 0.0 if cached else usage["cost_usd"]
 
         if trace is not None:
@@ -397,6 +488,7 @@ class LLMClient:
             "billed_cost_usd": round(self.stats["cost_usd"], 6),
             "pricing_known": self.pricing_known,
             "parameter_quirks_applied": sorted(self._compat),
+            "completion_budget_scale": self._token_scale,
         }
 
 

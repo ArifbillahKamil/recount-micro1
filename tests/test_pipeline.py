@@ -453,6 +453,135 @@ def test_warehouse_digest_is_content_based_not_file_based() -> None:
     )
 
 
+def test_empty_response_from_reasoning_model_is_recovered() -> None:
+    """A reasoning model can spend the whole ceiling thinking and return nothing.
+
+    Observed live on gpt-5.6-luna: max_tokens is renamed to
+    max_completion_tokens, that ceiling covers reasoning, and a value sized for a
+    chat model is consumed before any content is written. The response is a
+    valid 200 with empty content, so it must be detected and retried rather than
+    surfaced as a parse failure.
+    """
+    import tempfile as _tempfile
+
+    from recount.llm import MODE_RECORD, LLMClient
+    from recount.trace import Trace as _Trace
+
+    class ReasoningHeavy(LLMClient):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.budgets: list = []
+
+        def _post(self, body):
+            budget = body.get("max_completion_tokens") or body.get("max_tokens")
+            self.budgets.append(budget)
+            if budget < 5000:
+                return {
+                    "choices": [{"message": {"content": ""}, "finish_reason": "length"}],
+                    "usage": {
+                        "prompt_tokens": 900,
+                        "completion_tokens": budget,
+                        "completion_tokens_details": {"reasoning_tokens": budget},
+                    },
+                }
+            return {
+                "choices": [
+                    {
+                        "message": {"content": '{"verdict": "BUG"}'},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 900,
+                    "completion_tokens": 240,
+                    "prompt_tokens_details": {"cached_tokens": 700},
+                },
+            }
+
+    client = ReasoningHeavy(
+        model="gpt-5.6-luna",
+        cassette_dir=_tempfile.mkdtemp(prefix="recount-empty-"),
+        mode=MODE_RECORD,
+        api_key="unused",
+    )
+    trace = _Trace(case_id="empty-response")
+    response = client.chat(
+        [{"role": "user", "content": "plan"}], step="plan", max_tokens=1600, trace=trace
+    )
+
+    check("empty response is retried at a larger ceiling", len(client.budgets) == 2,
+          str(client.budgets))
+    check("the retry succeeds", response.json() == {"verdict": "BUG"}, response.text)
+    check(
+        "the raised ceiling is remembered for later calls",
+        client._token_scale > 1,
+        str(client._token_scale),
+    )
+    check(
+        "the retry is visible in the trajectory",
+        any(e.step == "token_budget" for e in trace.events),
+    )
+
+    client.budgets.clear()
+    client.chat([{"role": "user", "content": "adjudicate"}], step="adjudicate",
+                max_tokens=1200)
+    check(
+        "a later call starts at the learned ceiling, wasting no request",
+        len(client.budgets) == 1,
+        str(client.budgets),
+    )
+
+
+def test_cached_prompt_tokens_are_priced_at_the_cached_rate() -> None:
+    """Charging cached prompt tokens at full rate overstates cost substantially."""
+    import tempfile as _tempfile
+
+    from recount.llm import MODE_RECORD, LLMClient
+
+    client = LLMClient(
+        model="gpt-5.6-luna",
+        cassette_dir=_tempfile.mkdtemp(prefix="recount-price-"),
+        mode=MODE_RECORD,
+        api_key="unused",
+    )
+    usage = client._usage_from(
+        {
+            "usage": {
+                "prompt_tokens": 900,
+                "completion_tokens": 240,
+                "prompt_tokens_details": {"cached_tokens": 700},
+            }
+        }
+    )
+    expected = 200 * 0.20 / 1e6 + 700 * 0.02 / 1e6 + 240 * 1.20 / 1e6
+    check(
+        "cached tokens billed at the cached rate",
+        abs(usage["cost_usd"] - expected) < 1e-9,
+        f"{usage['cost_usd']} vs {expected}",
+    )
+    naive = 900 * 0.20 / 1e6 + 240 * 1.20 / 1e6
+    check(
+        "and that materially differs from ignoring the cache",
+        naive > usage["cost_usd"] * 1.2,
+        f"naive {naive} vs {usage['cost_usd']}",
+    )
+
+    unknown = LLMClient(
+        model="a-model-with-no-published-price",
+        cassette_dir=_tempfile.mkdtemp(prefix="recount-price2-"),
+        mode=MODE_RECORD,
+        api_key="unused",
+    )
+    unknown_usage = unknown._usage_from(
+        {"usage": {"prompt_tokens": 100, "completion_tokens": 10}}
+    )
+    check(
+        "an unpriced model reports cost as unknown rather than guessing",
+        unknown_usage["cost_known"] is False,
+        str(unknown_usage),
+    )
+
+
 def test_dotenv_parsing_and_precedence() -> None:
     """`.env` must work, must never override the shell, and must not leak values."""
     import io
@@ -571,6 +700,8 @@ TESTS = [
     test_probe_ablation_skips_planning,
     test_destructive_probe_is_blocked_and_reported,
     test_warehouse_digest_is_content_based_not_file_based,
+    test_empty_response_from_reasoning_model_is_recovered,
+    test_cached_prompt_tokens_are_priced_at_the_cached_rate,
     test_dotenv_parsing_and_precedence,
     test_dotenv_is_gitignored,
     test_trace_renders_markdown,
