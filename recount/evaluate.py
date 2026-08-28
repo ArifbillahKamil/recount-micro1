@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from . import agent, baseline, cases as case_mod, scoring, verdict as V, warehouse
+from . import agent, baseline, cases as case_mod, env, scoring, verdict as V, warehouse
 from .llm import MODE_AUTO, MODE_RECORD, MODE_REPLAY, CassetteMiss, LLMClient
 from .profiler import profile as build_profile
 from .scoring import Outcome, TimeModel
@@ -325,6 +325,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[list] = None) -> int:
     args = build_parser().parse_args(argv)
+    env.load()
 
     if args.compare:
         print(compare_files(args.compare))

@@ -111,12 +111,25 @@ def main() -> int:
         print("When ready, set OPENAI_API_KEY and run again without --dry-run.")
         return 0
 
+    sys.path.insert(0, str(HERE))
+    from recount import env as _env
+
+    _env.load(HERE)
+
     if not os.environ.get("OPENAI_API_KEY"):
         print("OPENAI_API_KEY is not set.\n", file=sys.stderr)
-        print("  Windows PowerShell:  $env:OPENAI_API_KEY=\"sk-...\"", file=sys.stderr)
-        print("  macOS / Linux:       export OPENAI_API_KEY=sk-...", file=sys.stderr)
-        print("\nOr use --dry-run to verify the project without an API key.",
+        print("Pick either one:\n", file=sys.stderr)
+        print(f"  A) a .env file at {HERE}", file=sys.stderr)
+        print("       cp .env.example .env          # macOS / Linux", file=sys.stderr)
+        print("       Copy-Item .env.example .env   # Windows PowerShell", file=sys.stderr)
+        print("     then edit it and put your key on the OPENAI_API_KEY line\n",
               file=sys.stderr)
+        print("  B) an environment variable in this shell", file=sys.stderr)
+        print("       $env:OPENAI_API_KEY=\"sk-...\"   # Windows PowerShell",
+              file=sys.stderr)
+        print("       export OPENAI_API_KEY=sk-...   # macOS / Linux\n",
+              file=sys.stderr)
+        print("Or use --dry-run to verify the project without a key.", file=sys.stderr)
         return 2
 
     main_label = f"main-{model}"

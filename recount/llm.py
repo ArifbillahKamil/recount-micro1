@@ -427,9 +427,12 @@ def list_models(api_key: Optional[str] = None, timeout_s: float = 30.0) -> list:
 if __name__ == "__main__":  # pragma: no cover
     import argparse
 
+    from . import env as _env
+
     parser = argparse.ArgumentParser(description="Inspect model access and pricing.")
     parser.add_argument("--list-models", action="store_true")
     args = parser.parse_args()
+    _env.load()
 
     if args.list_models:
         for model_id in list_models():

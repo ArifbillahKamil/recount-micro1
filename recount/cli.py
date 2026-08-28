@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from . import agent, baseline, cases as case_mod, report, warehouse
+from . import agent, baseline, cases as case_mod, env, report, warehouse
 from .llm import MODE_AUTO, MODE_RECORD, MODE_REPLAY, CassetteMiss, LLMClient, LLMError
 from .sqlio import SqlError, run_sql
 
@@ -87,6 +87,7 @@ def _resolve_input(args) -> tuple:
 
 def main(argv: Optional[list] = None) -> int:
     args = build_parser().parse_args(argv)
+    env.load()
 
     if args.build or not Path(args.db).exists():
         print(f"building demo warehouse at {args.db}", file=sys.stderr)

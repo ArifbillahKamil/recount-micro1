@@ -154,9 +154,37 @@ python3 -m recount.cli \
 
 Only needed to reproduce from scratch rather than from cassettes.
 
-```bash
-export OPENAI_API_KEY=sk-...
+### Supplying the API key
 
+Two options. Both are read by every entry point.
+
+**A. A `.env` file in the project root** — the same directory as `run_all.py`:
+
+```bash
+cp .env.example .env            # Windows PowerShell: Copy-Item .env.example .env
+```
+
+Then edit it:
+
+```
+OPENAI_API_KEY=sk-your-key-here
+```
+
+**B. An environment variable:**
+
+```bash
+export OPENAI_API_KEY=sk-...              # macOS / Linux
+$env:OPENAI_API_KEY="sk-..."              # Windows PowerShell
+```
+
+An exported variable always wins over `.env`, so a one-off
+`OPENAI_API_KEY=... python3 -m recount.evaluate ...` behaves as expected.
+
+`.env` is listed in `.gitignore` and must never be committed; a test asserts
+this. When a `.env` is loaded, only the *names* of the variables it set are
+printed, never the values.
+
+```bash
 # see which models your key can reach
 python3 -m recount.llm --list-models
 

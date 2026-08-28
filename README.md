@@ -282,12 +282,23 @@ python run_all.py --dry-run
 ```
 
 Expected: content digest `7e5f85250ade5358`, `12 cases validated: 8 BUG /
-4 CLEAN`, and `32 passed, 0 failed` / `31 passed, 0 failed`.
+4 CLEAN`, and `44 passed, 0 failed` / `31 passed, 0 failed`.
 
-Then, with a key:
+Then supply an API key, either way:
 
 ```bash
-export OPENAI_API_KEY=sk-...        # PowerShell: $env:OPENAI_API_KEY="sk-..."
+# A) a .env file in the project root
+cp .env.example .env            # PowerShell: Copy-Item .env.example .env
+#    then put your key on the OPENAI_API_KEY line
+
+# B) an environment variable
+export OPENAI_API_KEY=sk-...    # PowerShell: $env:OPENAI_API_KEY="sk-..."
+```
+
+An exported variable takes precedence over `.env`. `.env` is gitignored;
+`.env.example` is the template. Then:
+
+```bash
 python run_all.py --model gpt-4o-mini
 ```
 
@@ -309,7 +320,8 @@ recount/
   evaluate.py    the harness, plus the three ablations
   report.py      the artifact an analyst receives
   cli.py         verify one query
-tests/           63 checks, scripted model, no API calls
+  env.py         reads .env, without ever overriding the shell
+tests/           75 checks, scripted model, no API calls
 ```
 
 ## Safety

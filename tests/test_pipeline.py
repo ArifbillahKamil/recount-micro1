@@ -453,6 +453,88 @@ def test_warehouse_digest_is_content_based_not_file_based() -> None:
     )
 
 
+def test_dotenv_parsing_and_precedence() -> None:
+    """`.env` must work, must never override the shell, and must not leak values."""
+    import io
+    import os
+    import tempfile as _tempfile
+    from contextlib import redirect_stdout
+
+    from recount import env as env_mod
+
+    parsed = env_mod.parse(
+        "\n".join(
+            [
+                "# comment",
+                "PLAIN=sk-plain",
+                'export QUOTED="sk with space"',
+                "SINGLE='sk-single'",
+                "TRAILING=sk-abc # note",
+                'HASHED="sk-a#b"',
+                "EMPTY=",
+                "no equals sign here",
+            ]
+        )
+    )
+    check("plain value parsed", parsed.get("PLAIN") == "sk-plain", str(parsed))
+    check("export prefix stripped", parsed.get("QUOTED") == "sk with space", str(parsed))
+    check("single quotes stripped", parsed.get("SINGLE") == "sk-single", str(parsed))
+    check("inline comment removed", parsed.get("TRAILING") == "sk-abc", str(parsed))
+    check("hash inside quotes preserved", parsed.get("HASHED") == "sk-a#b", str(parsed))
+    check("malformed line ignored", "no equals sign here" not in parsed, str(parsed))
+
+    tmp = Path(_tempfile.mkdtemp(prefix="recount-env-"))
+    (tmp / "recount").mkdir()
+    (tmp / "run_all.py").write_text("", encoding="utf-8")
+    (tmp / ".env").write_text("RECOUNT_TEST_SECRET=sk-from-file\n", encoding="utf-8")
+
+    original = os.environ.pop("RECOUNT_TEST_SECRET", None)
+    try:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            env_mod.load(tmp)
+        check(
+            "value from .env is applied",
+            os.environ.get("RECOUNT_TEST_SECRET") == "sk-from-file",
+            str(os.environ.get("RECOUNT_TEST_SECRET")),
+        )
+        printed = buffer.getvalue()
+        check(
+            "the secret is never printed",
+            "sk-from-file" not in printed,
+            printed.strip(),
+        )
+        check("only the key name is reported", "RECOUNT_TEST_SECRET" in printed, printed)
+
+        # An exported variable must survive a second load.
+        os.environ["RECOUNT_TEST_SECRET"] = "sk-from-shell"
+        with redirect_stdout(io.StringIO()):
+            env_mod.load(tmp)
+        check(
+            "the shell environment wins over .env",
+            os.environ["RECOUNT_TEST_SECRET"] == "sk-from-shell",
+            os.environ["RECOUNT_TEST_SECRET"],
+        )
+    finally:
+        os.environ.pop("RECOUNT_TEST_SECRET", None)
+        if original is not None:
+            os.environ["RECOUNT_TEST_SECRET"] = original
+
+
+def test_dotenv_is_gitignored() -> None:
+    """A supported credential file that is not ignored is a leak waiting to happen."""
+    ignore = (Path(__file__).resolve().parents[1] / ".gitignore").read_text(
+        encoding="utf-8"
+    )
+    entries = {line.strip() for line in ignore.splitlines()}
+    check(".env is gitignored", ".env" in entries, sorted(entries))
+    check(
+        ".env.example is NOT ignored, so the template ships",
+        ".env.example" not in entries,
+        sorted(entries),
+    )
+
+
 def test_trace_renders_markdown() -> None:
     case = cases.by_id("B1_fanout_payments_via_line_items")
     _, trace, _ = run(
@@ -489,6 +571,8 @@ TESTS = [
     test_probe_ablation_skips_planning,
     test_destructive_probe_is_blocked_and_reported,
     test_warehouse_digest_is_content_based_not_file_based,
+    test_dotenv_parsing_and_precedence,
+    test_dotenv_is_gitignored,
     test_trace_renders_markdown,
 ]
 
