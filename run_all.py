@@ -93,7 +93,7 @@ def main() -> int:
         price = ["--price-in", str(args.price_in), "--price-out", str(args.price_out)]
 
     model = args.model
-    total = 3 if args.dry_run else 8
+    total = 3 if args.dry_run else 9
 
     banner(1, total, "Build the warehouse (deterministic, seeded)")
     run([PY, "-m", "recount.warehouse", "--db", "data/warehouse.db"])
@@ -136,6 +136,7 @@ def main() -> int:
     ablations = [
         ("no-profile", ["--no-profile"], "schema only, no measured data facts"),
         ("no-probes", ["--no-probes"], "no executed probes"),
+        ("no-recompute", ["--no-recompute"], "no independent recomputation"),
         ("no-gate", ["--no-gate"], "model verdict accepted as-is"),
     ]
 
@@ -148,7 +149,7 @@ def main() -> int:
         run([PY, "-m", "recount.evaluate", "--system", "recount", "--model", model,
              "--label", f"ablation-{name}-{model}"] + flags + price)
 
-    banner(8, total, "Confirm a reviewer with no API key gets the same numbers")
+    banner(9, total, "Confirm a reviewer with no API key gets the same numbers")
     run([PY, "-m", "recount.evaluate", "--system", "both", "--model", model,
          "--offline", "--label", f"verify-offline-{model}"] + price)
 

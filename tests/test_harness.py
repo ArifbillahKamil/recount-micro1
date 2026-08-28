@@ -102,8 +102,26 @@ class Seeder:
 
 
 def seed_all(db: str, cassette_dir: str) -> None:
-    """Record cassettes for both systems across all twelve cases."""
+    """Record cassettes for both systems across all twelve cases.
+
+    The recomputation step is shown the business question and the measured facts
+    but never the query under review, so two cases that ask the same question
+    produce a byte-identical request and therefore share one cassette. B5 and C4
+    are exactly that pair -- the same question, one query correct and one not --
+    which is the point of having them.
+
+    A scripted reply must therefore be a function of the question rather than of
+    the case, or the second case silently overwrites the first. Real runs get
+    this for free (the model sees one prompt and returns one answer, and the
+    shared key is a cost saving); only a hand-written script can violate it.
+    """
     shared_profile = profile(db)
+    recompute_for_question: dict = {}
+    for case in cases.CASES:
+        recompute_for_question.setdefault(
+            case.business_question, " ".join(case.reference_sql.split())
+        )
+
     for case in cases.CASES:
         always_bug = {
             "verdict": "BUG",
@@ -135,6 +153,14 @@ def seed_all(db: str, cassette_dir: str) -> None:
             Seeder(
                 cassette_dir,
                 {
+                    # A competent independent derivation: the reference query.
+                    # On a planted fault it disagrees with the query under
+                    # review; on a correct query it agrees. That asymmetry is
+                    # what the gate reads.
+                    "recompute": {
+                        "sql": recompute_for_question[case.business_question],
+                        "reasoning": "derived from the question and the grain",
+                    },
                     "plan": {
                         "hypotheses": [
                             {
@@ -239,11 +265,15 @@ def main() -> int:
 
     print("\ncost accounting")
     check("baseline 1 model call per case", base["llm_calls"] == 12, str(base["llm_calls"]))
-    check("recount 2 model calls per case", rec["llm_calls"] == 24, str(rec["llm_calls"]))
+    check(
+        "recount 3 model calls per case (recompute, plan, adjudicate)",
+        rec["llm_calls"] == 36,
+        str(rec["llm_calls"]),
+    )
     check("baseline cost/case is priced from recorded tokens",
           round(base["cost_per_case_usd"], 5) == 0.00027, str(base["cost_per_case_usd"]))
-    check("recount cost/case is double the baseline",
-          round(rec["cost_per_case_usd"], 5) == 0.00054, str(rec["cost_per_case_usd"]))
+    check("recount cost/case is triple the baseline",
+          round(rec["cost_per_case_usd"], 5) == 0.00081, str(rec["cost_per_case_usd"]))
 
     print("\nartifacts")
     run_dir = out_dir / "gate-on"

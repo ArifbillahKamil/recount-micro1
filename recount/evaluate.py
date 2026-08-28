@@ -53,6 +53,7 @@ class RunConfig:
     enable_gate: bool = True
     enable_probes: bool = True
     enable_profile: bool = True
+    enable_recompute: bool = True
     max_probes: int = agent.MAX_PROBES
     price_in: Optional[float] = None
     price_out: Optional[float] = None
@@ -65,6 +66,7 @@ class RunConfig:
             "gate_enabled": self.enable_gate,
             "probes_enabled": self.enable_probes,
             "profile_enabled": self.enable_profile,
+            "recompute_enabled": self.enable_recompute,
             "max_probes": self.max_probes,
             "db": self.db,
         }
@@ -132,6 +134,7 @@ def run_system(
                 enable_gate=config.enable_gate,
                 enable_probes=config.enable_probes,
                 enable_profile=config.enable_profile,
+                enable_recompute=config.enable_recompute,
             )
 
         elapsed = time.time() - started
@@ -313,6 +316,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="ablation: schema only, no measured data facts",
     )
+    p.add_argument(
+        "--no-recompute",
+        action="store_true",
+        help="ablation: skip the independent recomputation",
+    )
     p.add_argument("--max-probes", type=int, default=agent.MAX_PROBES)
     p.add_argument("--price-in", type=float, default=None, help="USD per 1M input tokens")
     p.add_argument("--price-out", type=float, default=None, help="USD per 1M output tokens")
@@ -386,6 +394,7 @@ def main(argv: Optional[list] = None) -> int:
         enable_gate=not args.no_gate,
         enable_probes=not args.no_probes,
         enable_profile=not args.no_profile,
+        enable_recompute=not args.no_recompute,
         max_probes=args.max_probes,
         price_in=args.price_in,
         price_out=args.price_out,
@@ -435,6 +444,8 @@ def _default_label(args, mode: str) -> str:
         bits.append("no-probes")
     if args.no_profile:
         bits.append("no-profile")
+    if args.no_recompute:
+        bits.append("no-recompute")
     if mode == MODE_REPLAY:
         bits.append("replay")
     return "-".join(bits)

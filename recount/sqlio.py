@@ -134,3 +134,36 @@ def schema_ddl(db_path: str | Path) -> str:
     )
     statements = [row[0].strip() for row in result["rows"] if row[0]]
     return ";\n\n".join(statements) + ";"
+
+
+
+def values_match(left: dict, right: dict) -> bool:
+    """Compare two result sets by value, ignoring column names.
+
+    An independently derived query answers the same question but need not label
+    its output identically. Comparing signatures including column names would
+    report a disagreement over an alias, so only shape and values are compared.
+    """
+    left_rows, right_rows = left.get("rows") or [], right.get("rows") or []
+    if len(left_rows) != len(right_rows):
+        return False
+    for a, b in zip(left_rows, right_rows):
+        if len(a) != len(b):
+            return False
+        for x, y in zip(a, b):
+            if x is None or y is None:
+                if x is not y:
+                    return False
+                continue
+            if isinstance(x, bool) != isinstance(y, bool):
+                return False
+            if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                # Tolerate float noise; integers still compare exactly.
+                if isinstance(x, int) and isinstance(y, int):
+                    if x != y:
+                        return False
+                elif abs(float(x) - float(y)) > 1e-9 * max(1.0, abs(float(x))):
+                    return False
+            elif str(x) != str(y):
+                return False
+    return True

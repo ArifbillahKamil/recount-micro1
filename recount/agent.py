@@ -43,7 +43,14 @@ from typing import Optional
 from . import verdict as V
 from .llm import CassetteMiss, LLMClient, LLMError
 from .profiler import Profile, profile as build_profile
-from .sqlio import SqlError, render_result, result_signature, run_sql, schema_ddl
+from .sqlio import (
+    SqlError,
+    render_result,
+    result_signature,
+    run_sql,
+    schema_ddl,
+    values_match,
+)
 from .trace import Trace
 
 MAX_PROBES = 4
@@ -99,10 +106,33 @@ Reply with one JSON object and nothing else:
 
 {{"probes": [{{"index": <original index>, "probe_sql": "a single SELECT"}}]}}"""
 
+RECOMPUTE_SYSTEM = """You are a senior analytics engineer. You are handed a
+business question and the measured facts about a warehouse, and you write the
+query that answers it. You are not reviewing anyone's work: you are deriving the
+answer independently."""
+
+RECOMPUTE_TEMPLATE = """Business question:
+{question}
+
+{profile}
+
+Write a single read-only SQL query that answers this question against this
+SQLite warehouse.
+
+Derive it from the question and the measured facts above. Pay attention to the
+grain of each measure, to columns that are nullable in practice, and to whether
+a join fans out.
+
+Return exactly these columns, in this order, with these names:
+{columns}
+
+Reply with one JSON object and nothing else:
+
+{{"sql": "a single SELECT, no semicolon", "reasoning": "one sentence on the grain and filters you chose"}}"""
+
 ADJUDICATOR_SYSTEM = """You are a senior analytics engineer signing off on
-whether a number can go into a business report. You have executed probes and can
-now decide. You are accountable for false alarms: flagging a correct query wastes
-an analyst's afternoon and trains them to ignore you."""
+whether a number can go into a business report. You have executed probes and an
+independent recomputation, and you now decide based on what they returned."""
 
 ADJUDICATOR_TEMPLATE = """Business question the analyst asked:
 {question}
@@ -118,18 +148,18 @@ Result it returned:
 Probes you designed, and what executing them actually returned:
 {probes}
 
-Decide the verdict from the probe evidence.
+{recompute}
 
-Two reminders that decide most cases:
+Decide the verdict from what was executed, not from how the SQL looks.
 
-* Judge against the business question, not against SQL style. Joining to a finer
-  grain is a bug when the requested metric is coarser, and correct when the
-  metric genuinely lives at that finer grain. A fan-out that the query already
-  handles correctly is not a bug.
-* If you answer BUG, corrected_sql is mandatory and it will be executed and
-  compared against the original query. If your correction returns the same
-  result as the original, your bug claim is treated as a false alarm. Only claim
-  BUG when your correction would return a different number.
+* The recomputation above is the strongest evidence available. If it returns a
+  different number from the query under review, the two disagree and the
+  reported number cannot be trusted. If it returns the same number, two
+  independent derivations agree.
+* Judge against the business question. Joining to a finer grain is a bug when
+  the requested metric is coarser, and correct when the metric genuinely lives
+  at that finer grain.
+* If you answer BUG, corrected_sql is mandatory and will be executed.
 
 {contract}"""
 
@@ -172,6 +202,96 @@ def _render_hypotheses(hypotheses: list) -> str:
             block.append(indented)
         blocks.append("\n".join(block))
     return "\n\n".join(blocks)
+
+
+@dataclass
+class Recompute:
+    """An independent derivation of the requested metric, and what it returned."""
+
+    sql: Optional[str] = None
+    reasoning: str = ""
+    result: Optional[dict] = None
+    result_text: str = ""
+    error: Optional[str] = None
+
+    @property
+    def ok(self) -> bool:
+        return self.result is not None
+
+    def render(self, original_text: str) -> str:
+        if self.error:
+            return (
+                "Independent recomputation: FAILED to produce a runnable query "
+                f"({self.error}). No second opinion is available."
+            )
+        if not self.ok:
+            return "Independent recomputation: not attempted."
+        return (
+            "An independent recomputation was derived from the business question "
+            "alone, without seeing the query under review, then executed:\n\n"
+            f"  sql: {' '.join((self.sql or '').split())}\n"
+            f"  returned:\n{_indent(self.result_text, 4)}\n\n"
+            f"  the query under review returned:\n{_indent(original_text, 4)}"
+        )
+
+
+def _indent(text: str, spaces: int) -> str:
+    pad = " " * spaces
+    return "\n".join(pad + line for line in (text or "").splitlines())
+
+
+def _recompute(
+    client: LLMClient,
+    trace: Trace,
+    db_path: str | Path,
+    question: str,
+    profile_text: str,
+    original_result: dict,
+) -> Recompute:
+    """Derive the answer from scratch, then run it.
+
+    The query under review is deliberately withheld. A reviewer shown the
+    original tends to reproduce its mistakes, and the value of a second opinion
+    lies precisely in it being arrived at independently. Only the expected output
+    columns are disclosed, so the two results can be compared at all.
+    """
+    columns = ", ".join(original_result.get("columns") or []) or "(a single value)"
+    messages = [
+        {"role": "system", "content": RECOMPUTE_SYSTEM},
+        {
+            "role": "user",
+            "content": RECOMPUTE_TEMPLATE.format(
+                question=question.strip(),
+                profile=profile_text,
+                columns=columns,
+            ),
+        },
+    ]
+
+    try:
+        response = client.chat(messages, step="recompute", max_tokens=1200, trace=trace)
+        payload = response.json()
+    except LLMError as exc:
+        if isinstance(exc, CassetteMiss):
+            raise
+        trace.add_note("recompute", f"model call failed: {exc}")
+        return Recompute(error=str(exc))
+
+    sql = str(payload.get("sql") or "").strip()
+    reasoning = str(payload.get("reasoning") or "").strip()
+    if not sql:
+        trace.add_note("recompute", "no query was produced")
+        return Recompute(reasoning=reasoning, error="no query produced")
+
+    try:
+        result = run_sql(db_path, sql)
+    except SqlError as exc:
+        trace.add_tool("recompute", "run_sql", sql, str(exc), ok=False)
+        return Recompute(sql=sql, reasoning=reasoning, error=str(exc))
+
+    rendered = render_result(result)
+    trace.add_tool("recompute", "run_sql", sql, rendered)
+    return Recompute(sql=sql, reasoning=reasoning, result=result, result_text=rendered)
 
 
 def _plan(
@@ -296,6 +416,7 @@ def _adjudicate(
     profile_text: str,
     result_text: str,
     hypotheses: list,
+    recompute: Recompute,
 ) -> V.Verdict:
     messages = [
         {"role": "system", "content": ADJUDICATOR_SYSTEM},
@@ -307,6 +428,7 @@ def _adjudicate(
                 result=result_text,
                 profile=profile_text,
                 probes=_render_hypotheses(hypotheses),
+                recompute=recompute.render(result_text),
                 contract=V.OUTPUT_CONTRACT,
             ),
         },
@@ -321,8 +443,28 @@ def _gate(
     result: V.Verdict,
     original_sql: str,
     original_result: dict,
+    recompute: Optional[Recompute] = None,
 ) -> V.Verdict:
-    """Require a BUG claim to have an executable, consequential correction."""
+    """Decide from executed numbers rather than from the model's confidence.
+
+    When an independent recomputation is available it is decisive, because it is
+    symmetric: it can contradict a CLEAN verdict as readily as a BUG one. The
+    first version of this gate could only downgrade a bug claim, which left it
+    unable to catch the case that matters most -- a real fault waved through.
+    """
+    if recompute is not None and recompute.ok:
+        return _gate_by_recomputation(
+            db_path, trace, result, original_result, recompute
+        )
+
+    if recompute is not None and recompute.error:
+        trace.add_note(
+            "verification_gate",
+            "No independent recomputation was available "
+            f"({recompute.error}); falling back to checking the proposed "
+            "correction on its own.",
+        )
+
     if result.verdict != V.BUG:
         trace.add_gate(
             "verification_gate",
@@ -425,6 +567,124 @@ def _gate(
     return result
 
 
+def _gate_by_recomputation(
+    db_path: str | Path,
+    trace: Trace,
+    result: V.Verdict,
+    original_result: dict,
+    recompute: Recompute,
+) -> V.Verdict:
+    """Compare two independent derivations of the same question."""
+    original_text = render_result(original_result)
+    agree = values_match(original_result, recompute.result)
+
+    if agree:
+        if result.verdict == V.BUG:
+            trace.add_gate(
+                "verification_gate",
+                V.CLEAN,
+                "a query derived independently from the question returns exactly "
+                "the reported number, so the bug claim is not supported",
+                {"both_returned": original_text},
+            )
+            result.verdict = V.CLEAN
+            result.bug_type = None
+            result.corrected_sql = None
+            result.explanation = (
+                "Checked and no discrepancy found. A query written independently "
+                "from the question, without reference to this one, returns the "
+                "same number."
+            )
+        else:
+            trace.add_gate(
+                "verification_gate",
+                result.verdict,
+                "an independently derived query returns the same number, "
+                "corroborating the reported result",
+                {"both_returned": original_text},
+            )
+        result.evidence.append(
+            V.Evidence(
+                claim="a query derived independently returns the same number",
+                sql=recompute.sql or "",
+                result_text=recompute.result_text,
+                delta="no difference",
+            )
+        )
+        return result
+
+    # The two derivations disagree, so the reported number is not reliable.
+    delta_text, delta_detail = _describe_delta(original_result, recompute.result)
+
+    if result.verdict == V.BUG:
+        corrected = _best_correction(db_path, result, recompute)
+        trace.add_gate(
+            "verification_gate",
+            V.BUG,
+            "an independently derived query returns a different number, "
+            "demonstrating the discrepancy",
+            {"reported": original_text, "recomputed": recompute.result_text},
+        )
+        result.corrected_sql = corrected
+        result.evidence.append(
+            V.Evidence(
+                claim="an independent derivation of this metric disagrees",
+                sql=recompute.sql or "",
+                result_text=recompute.result_text,
+                delta=delta_text,
+                detail=delta_detail,
+            )
+        )
+        return result
+
+    # A conflict: the reviewer sees no fault, but the recomputation disagrees.
+    # Neither can be trusted over the other, so a human decides.
+    trace.add_gate(
+        "verification_gate",
+        V.ESCALATE,
+        "the reviewer found no fault, but an independently derived query returns "
+        "a different number; the conflict cannot be settled automatically",
+        {"reported": original_text, "recomputed": recompute.result_text},
+    )
+    result.verdict = V.ESCALATE
+    result.bug_type = None
+    result.error = "recomputation_conflict"
+    result.explanation = (
+        "Two independent derivations of this metric disagree, so the reported "
+        f"number should not be used until someone decides which is right. {delta_text}."
+    )
+    result.evidence.append(
+        V.Evidence(
+            claim="an independent derivation of this metric disagrees",
+            sql=recompute.sql or "",
+            result_text=recompute.result_text,
+            delta=delta_text,
+            detail=delta_detail,
+        )
+    )
+    return result
+
+
+def _best_correction(
+    db_path: str | Path, result: V.Verdict, recompute: Recompute
+) -> Optional[str]:
+    """Prefer the reviewer's correction when it corroborates the recomputation.
+
+    Two derivations agreeing on the corrected value is stronger than either
+    alone. When they disagree, the independent derivation is used, since it was
+    produced without sight of the faulty query.
+    """
+    candidate = result.corrected_sql
+    if candidate:
+        try:
+            produced = run_sql(db_path, candidate)
+            if values_match(produced, recompute.result):
+                return candidate
+        except SqlError:
+            pass
+    return recompute.sql or candidate
+
+
 def _describe_delta(original: dict, corrected: dict) -> tuple:
     """Express the discrepancy in the analyst's units where possible.
 
@@ -489,6 +749,7 @@ def review(
     enable_gate: bool = True,
     enable_probes: bool = True,
     enable_profile: bool = True,
+    enable_recompute: bool = True,
 ) -> tuple:
     """Verify one query. Returns ``(Verdict, Trace)``.
 
@@ -531,7 +792,18 @@ def review(
         )
 
     hypotheses: list = []
+    recompute = Recompute()
     try:
+        if enable_recompute:
+            recompute = _recompute(
+                client, trace, db_path, question, profile_text, original_result
+            )
+        else:
+            trace.add_note(
+                "recompute_disabled",
+                "Independent recomputation disabled for this run.",
+            )
+
         if enable_probes:
             hypotheses = _plan(
                 client, trace, question, sql, profile_text, original_text, max_probes
@@ -549,7 +821,8 @@ def review(
             )
 
         result = _adjudicate(
-            client, trace, question, sql, profile_text, original_text, hypotheses
+            client, trace, question, sql, profile_text, original_text,
+            hypotheses, recompute,
         )
     except CassetteMiss:
         # A missing recording is a reproducibility failure, not a verdict.
@@ -566,7 +839,7 @@ def review(
             )
 
     if enable_gate:
-        result = _gate(db_path, trace, result, sql, original_result)
+        result = _gate(db_path, trace, result, sql, original_result, recompute)
     else:
         trace.add_gate(
             "verification_gate",
