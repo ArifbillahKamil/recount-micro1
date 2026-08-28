@@ -122,9 +122,15 @@ replays them, needs no API key, and makes no network call:
 python3 -m recount.evaluate --system both --offline
 ```
 
-Writes `runs/both-<model>-replay/results.md`, `results.json`, and one trajectory
-per case per system under `traces/`. The headline table in `results.md` is the
+Writes `results.md`, `results.json`, and one trajectory per case per system
+under `traces/`, in a directory named after the run — for example
+`runs/both-gpt-4o-mini-replay/`. The headline table in `results.md` is the
 comparison reported in the README.
+
+> **Windows note.** Every command in this guide uses concrete values rather than
+> `<placeholders>`, because `<` is a redirection operator in PowerShell and a
+> pasted placeholder fails to parse before Python ever runs. Substitute your own
+> values directly.
 
 Runtime: a few seconds. Cost: $0.00.
 

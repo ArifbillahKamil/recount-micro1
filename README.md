@@ -240,14 +240,12 @@ test: measured facts, executed probes, and the gate.
 ## Results
 
 > **This section is generated from a recorded run.** Reproduce it with
-> `python run_all.py --model <model>`, then read
-> `runs/main-<model>/results.md`. The committed `cassettes/` let you replay the
-> same run offline for free with `python -m recount.evaluate --system both
-> --offline`.
+> `python run_all.py --model gpt-4o-mini`, then read the `results.md` written
+> under `runs/`. The committed `cassettes/` let you replay the same run offline
+> for free with `python -m recount.evaluate --system both --offline`.
 >
-> _Awaiting the live run — the table below is populated from
-> `runs/main-<model>/results.md` and is not yet filled in. No numbers are
-> claimed here until they come out of the harness._
+> _Awaiting the live run. No numbers are claimed here until they come out of the
+> harness._
 
 <!-- RESULTS:BEGIN -->
 <!-- Populated from runs/main-<model>/results.md -->

@@ -491,7 +491,10 @@ if __name__ == "__main__":  # pragma: no cover
     print(f" ({hidden} hidden: use --all to see them)" if hidden else "")
     print(
         "\n  Prices above are unverified and only a convenience. Confirm at\n"
-        "  https://openai.com/api/pricing and pass the rate you are billed:\n"
-        "    python -m recount.evaluate --model <id> --price-in <in> --price-out <out>\n"
-        "  A model with no price reports cost as \"unpriced\" rather than guessing."
+        "  https://openai.com/api/pricing and pass the rate you are billed, e.g.\n"
+        "    python -m recount.evaluate --model gpt-4o-mini "
+        "--price-in 0.15 --price-out 0.60\n"
+        "  A model with no price reports cost as \"unpriced\" rather than guessing.\n"
+        "  (Substitute real numbers. Angle brackets are a redirection operator in\n"
+        "   PowerShell and will fail to parse.)"
     )
