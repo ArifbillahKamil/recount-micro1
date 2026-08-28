@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+
+# Regenerated deterministically by `python3 -m recount.warehouse`.
+data/*.db
+
+# Evaluation output. Keep the run you report; the rest is scratch.
+runs/
+
+# cassettes/ is intentionally NOT ignored. Committing it is what lets a
+# reviewer reproduce the published numbers with no API key and no cost, and it
+# is the agent trajectory evidence.
+
+.env
+.DS_Store
+.venv/
