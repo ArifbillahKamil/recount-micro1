@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -400,8 +401,34 @@ class LLMClient:
 
 
 
+# Model ids that cannot serve a chat completion, matched by substring. An
+# account typically exposes well over a hundred models, most of them speech,
+# image, embedding or moderation endpoints. Listing them all buries the handful
+# that are actually candidates.
+NON_CHAT_MARKERS = (
+    "tts", "whisper", "transcribe", "audio", "realtime", "embedding",
+    "moderation", "image", "sora", "search-api", "search-preview",
+    "babbage", "davinci", "instruct", "live-",
+)
+
+
+def is_chat_candidate(model_id: str) -> bool:
+    """Whether a model id could plausibly serve a JSON chat completion."""
+    lowered = model_id.lower()
+    return not any(marker in lowered for marker in NON_CHAT_MARKERS)
+
+
+def is_dated_snapshot(model_id: str) -> bool:
+    """True for pinned snapshots like ``gpt-5.4-mini-2026-03-17``.
+
+    Snapshots duplicate their alias and triple the length of the list, so they
+    are hidden by default. They remain perfectly usable if named explicitly.
+    """
+    return bool(re.search(r"-\d{4}-\d{2}-\d{2}$", model_id))
+
+
 def list_models(api_key: Optional[str] = None, timeout_s: float = 30.0) -> list:
-    """Return model ids the key can reach, newest-looking first.
+    """Return every model id the key can reach, sorted.
 
     Useful before an evaluation run: pick a model you actually have access to,
     then pin its price with --price-in/--price-out.
@@ -430,18 +457,41 @@ if __name__ == "__main__":  # pragma: no cover
     from . import env as _env
 
     parser = argparse.ArgumentParser(description="Inspect model access and pricing.")
-    parser.add_argument("--list-models", action="store_true")
+    parser.add_argument(
+        "--list-models", action="store_true",
+        help="chat-capable models your key can reach",
+    )
+    parser.add_argument(
+        "--all", action="store_true",
+        help="include speech, image, embedding models and dated snapshots",
+    )
     args = parser.parse_args()
     _env.load()
 
-    if args.list_models:
-        for model_id in list_models():
-            price = PRICING.get(model_id)
-            note = (
-                f"${price[0]}/${price[1]} per 1M (unconfirmed)"
-                if price
-                else "not in pricing table -- pass --price-in/--price-out"
-            )
-            print(f"  {model_id:<40} {note}")
-    else:
+    if not args.list_models:
         parser.print_help()
+        raise SystemExit(0)
+
+    every = list_models()
+    shown = every if args.all else [
+        m for m in every if is_chat_candidate(m) and not is_dated_snapshot(m)
+    ]
+
+    for model_id in shown:
+        price = PRICING.get(model_id)
+        note = (
+            f"${price[0]} in / ${price[1]} out per 1M (UNCONFIRMED - verify)"
+            if price
+            else "price unknown -- pass --price-in/--price-out"
+        )
+        print(f"  {model_id:<28} {note}")
+
+    hidden = len(every) - len(shown)
+    print(f"\n  {len(shown)} chat-capable of {len(every)} total", end="")
+    print(f" ({hidden} hidden: use --all to see them)" if hidden else "")
+    print(
+        "\n  Prices above are unverified and only a convenience. Confirm at\n"
+        "  https://openai.com/api/pricing and pass the rate you are billed:\n"
+        "    python -m recount.evaluate --model <id> --price-in <in> --price-out <out>\n"
+        "  A model with no price reports cost as \"unpriced\" rather than guessing."
+    )
