@@ -1,6 +1,6 @@
 # Trajectory — recount — B3_null_swallowing_status_filter
 
-`2` model calls (`1` replayed from cassette) · `2` tool calls · `1768` tokens · `$0.00035`
+`2` model calls (`1` replayed from cassette) · `2` tool calls · `1772` tokens · `$0.00035`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -28,7 +28,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 591 in / 66 out · 0.00s
+`gpt-4o-mini` · replayed · 595 in / 66 out · 0.00s
 
 **system**
 
@@ -111,8 +111,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 active_orders
@@ -150,7 +150,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 996 in / 115 out · 1.84s
+`gpt-4o-mini` · live call · 996 in / 115 out · 1.46s
 
 **system**
 
@@ -294,7 +294,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query under review counts orders with a status that is not 'cancelled', but it does not account for orders that have a NULL status, which are also considered active. The independent recomputation correctly includes these NULL statuses, resulting in a higher count from the orders table.",
+  "explanation": "The query under review counts orders with a status that is not 'cancelled', but it does not account for orders that have a NULL status, which are still considered active. The independent recomputation correctly includes these NULL statuses, resulting in a higher count from the orders table.",
   "corrected_sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'"
 }
 ```

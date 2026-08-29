@@ -1,6 +1,6 @@
 # Trajectory — recount — B7_mixed_currency_unit_error
 
-`2` model calls (`1` replayed from cassette) · `7` tool calls · `2535` tokens · `$0.00061`
+`2` model calls (`1` replayed from cassette) · `7` tool calls · `2577` tokens · `$0.00063`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -32,6 +32,10 @@ idr_revenue_cents
   "tables": [
     "orders",
     "payments"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -68,7 +72,7 @@ Independent recomputation disabled for this run.
 
 ## 4. model · plan
 
-`gpt-4o-mini` · replayed · 772 in / 371 out · 0.00s
+`gpt-4o-mini` · replayed · 772 in / 397 out · 0.00s
 
 **system**
 
@@ -153,25 +157,25 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "The payments table may contain payments for orders that are not completed.",
       "bug_type": "missing_filter",
       "probe_sql": "SELECT COUNT(*) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status != 'completed'",
-      "settles": "A non-zero count would confirm this issue, while a count of zero would rule it out."
+      "settles": "If the count is greater than 0, it confirms the issue; if 0, it rules it out."
     },
     {
       "risk": "The orders table may have completed orders that do not have corresponding payments.",
       "bug_type": "fanout_join",
       "probe_sql": "SELECT COUNT(*) FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND p.order_id IS NULL",
-      "settles": "A non-zero count would confirm this issue, while a count of zero would rule it out."
+      "settles": "If the count is greater than 0, it confirms the issue; if 0, it rules it out."
     },
     {
-      "risk": "The query may include payments in currencies other than IDR.",
+      "risk": "The query may be aggregating payments in different currencies without filtering for IDR.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency != 'IDR'",
-      "settles": "A non-zero count would confirm this issue, while a count of zero would rule it out."
+      "probe_sql": "SELECT SUM(p.amount_cents) AS total_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency != 'IDR'",
+      "settles": "If the total revenue is greater than 0, it confirms the issue; if 0, it rules it out."
     },
     {
-      "risk": "The aggregation may be affected by duplicate payments for the same order.",
+      "risk": "The payments table may contain duplicate entries for the same order.",
       "bug_type": "wrong_aggregation_grain",
       "probe_sql": "SELECT order_id, COUNT(*) FROM payments GROUP BY order_id HAVING COUNT(*) > 1",
-      "settles": "A non-zero count would confirm this issue, while a count of zero would rule it out."
+      "settles": "If any rows are returned, it confirms the issue; if none, it rules it out."
     }
   ]
 }
@@ -214,15 +218,15 @@ COUNT(*)
 **request**
 
 ```sql
-SELECT COUNT(*) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency != 'IDR'
+SELECT SUM(p.amount_cents) AS total_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency != 'IDR'
 ```
 
 **response**
 
 ```
-COUNT(*)
---------
-145     
+total_revenue_cents
+-------------------
+725420000          
 ```
 
 ## 8. tool · `run_sql` · probe_4 · ok
@@ -256,7 +260,7 @@ order_id | COUNT(*)
 
 ## 9. model · adjudicate
 
-`gpt-4o-mini` · live call · 1251 in / 141 out · 1.94s
+`gpt-4o-mini` · live call · 1270 in / 138 out · 1.29s
 
 **system**
 
@@ -320,14 +324,14 @@ Probes you designed, and what executing them actually returned:
     --------
     0       
 
-[3] risk: The query may include payments in currencies other than IDR.
-    probe: SELECT COUNT(*) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency != 'IDR'
+[3] risk: The query may be aggregating payments in different currencies without filtering for IDR.
+    probe: SELECT SUM(p.amount_cents) AS total_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency != 'IDR'
     returned:
-    COUNT(*)
-    --------
-    145     
+    total_revenue_cents
+    -------------------
+    725420000          
 
-[4] risk: The aggregation may be affected by duplicate payments for the same order.
+[4] risk: The payments table may contain duplicate entries for the same order.
     probe: SELECT order_id, COUNT(*) FROM payments GROUP BY order_id HAVING COUNT(*) > 1
     returned:
     order_id | COUNT(*)
@@ -389,7 +393,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "mixed_unit_aggregation",
   "confidence": 0.8,
-  "explanation": "The query aggregates payments from the payments table without filtering out those that are not in IDR, as evidenced by the 145 completed orders with non-IDR payments. Additionally, there are 327 payments associated with non-completed orders, which could lead to incorrect revenue calculations.",
+  "explanation": "The query aggregates payments without filtering for the IDR currency, as evidenced by probe [3] which shows significant revenue in other currencies. Additionally, probe [1] indicates that there are payments for orders that are not completed, which could further skew the results.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'"
 }
 ```

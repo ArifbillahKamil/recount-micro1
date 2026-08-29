@@ -1,6 +1,6 @@
 # Trajectory — recount — B5_between_loses_last_day
 
-`2` model calls (`1` replayed from cassette) · `2` tool calls · `1867` tokens · `$0.00040`
+`2` model calls (`1` replayed from cassette) · `2` tool calls · `1855` tokens · `$0.00039`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -28,7 +28,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 581 in / 81 out · 0.00s
+`gpt-4o-mini` · replayed · 585 in / 83 out · 0.00s
 
 **system**
 
@@ -111,8 +111,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 january_orders
@@ -125,7 +125,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'", "reasoning": "The query counts the total number of orders placed in January 2026 by filtering the order timestamps within the specified date range."}
+{"sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'", "reasoning": "The query counts the total number of orders placed in January 2026 by filtering the order timestamps within the specified date range in UTC."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -150,7 +150,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1024 in / 181 out · 3.10s
+`gpt-4o-mini` · live call · 1024 in / 163 out · 2.65s
 
 **system**
 
@@ -294,7 +294,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "date_range_truncation",
   "confidence": 0.9,
-  "explanation": "The query under review uses a date range that includes the entire day of January 31, 2026, but does not account for the time component, leading to an incorrect count of orders. The independent recomputation correctly uses a range that captures all orders from the start of January 1 to just before February 1, 2026. This discrepancy indicates that the query does not accurately reflect the total number of orders placed in January 2026.",
+  "explanation": "The query under review uses a date range that includes the entire day of January 31, 2026, but does not account for the time component, leading to an incorrect count of orders. The independent recomputation correctly uses a range that captures all orders from the start of January 1 to just before February 1, ensuring all orders in January are included.",
   "corrected_sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'"
 }
 ```

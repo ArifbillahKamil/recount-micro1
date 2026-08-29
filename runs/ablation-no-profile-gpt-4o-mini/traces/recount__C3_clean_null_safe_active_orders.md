@@ -1,6 +1,6 @@
 # Trajectory — recount — C3_clean_null_safe_active_orders
 
-`3` model calls (`0` replayed from cassette) · `6` tool calls · `3203` tokens · `$0.00073`
+`3` model calls (`0` replayed from cassette) · `6` tool calls · `3201` tokens · `$0.00073`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -28,7 +28,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · live call · 583 in / 58 out · 1.13s
+`gpt-4o-mini` · live call · 587 in / 58 out · 1.38s
 
 **system**
 
@@ -111,8 +111,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 active_orders
@@ -146,7 +146,7 @@ active_orders
 
 ## 5. model · plan
 
-`gpt-4o-mini` · live call · 799 in / 404 out · 4.29s
+`gpt-4o-mini` · live call · 799 in / 408 out · 4.50s
 
 **system**
 
@@ -267,28 +267,28 @@ out, do not propose a fan-out hypothesis about it.
 {
   "hypotheses": [
     {
-      "risk": "There may be orders with a NULL status that are not counted correctly due to the COALESCE function.",
+      "risk": "The status column in the orders table may contain unexpected values that are not accounted for in the query.",
       "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL",
-      "settles": "If the count of null_status_orders is greater than 0, it confirms the issue; if it is 0, the query is correct."
+      "probe_sql": "SELECT status, COUNT(*) AS count FROM orders GROUP BY status",
+      "settles": "If the result shows unexpected statuses (e.g., 'pending', 'shipped'), it confirms the issue. If only 'cancelled' and NULL are present, it rules it out."
     },
     {
-      "risk": "There may be orders with a status that is not 'cancelled' but is also not accounted for in the query, such as 'pending' or 'completed'.",
+      "risk": "There may be orders with NULL status that are not being counted correctly due to the COALESCE function.",
+      "bug_type": "null_swallowing_predicate",
+      "probe_sql": "SELECT COUNT(*) AS null_status_count FROM orders WHERE status IS NULL",
+      "settles": "If the count is greater than 0, it confirms the issue. If the count is 0, it rules it out."
+    },
+    {
+      "risk": "The query may not account for orders that have been refunded but are still considered active.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT status, COUNT(*) AS status_count FROM orders GROUP BY status",
-      "settles": "If there are statuses other than 'cancelled' and NULL, it confirms the issue; if only 'cancelled' and NULL are present, the query is correct."
+      "probe_sql": "SELECT COUNT(*) AS refunded_orders_count FROM orders o JOIN refunds r ON o.order_id = r.order_id",
+      "settles": "If the count of refunded orders is greater than 0, it confirms the issue. If the count is 0, it rules it out."
     },
     {
-      "risk": "The query may not account for orders that have been refunded, which could imply they are not active.",
-      "bug_type": "other",
-      "probe_sql": "SELECT COUNT(DISTINCT order_id) AS refunded_orders FROM refunds",
-      "settles": "If refunded_orders is greater than 0, it confirms the issue; if it is 0, the query is correct."
-    },
-    {
-      "risk": "There may be orders that have been created but not yet paid, which could affect the active order count.",
-      "bug_type": "other",
-      "probe_sql": "SELECT COUNT(*) AS unpaid_orders FROM orders WHERE order_id NOT IN (SELECT order_id FROM payments)",
-      "settles": "If unpaid_orders is greater than 0, it confirms the issue; if it is 0, the query is correct."
+      "risk": "There may be orders that are not linked to any customers, which could affect the interpretation of active orders.",
+      "bug_type": "missing_filter",
+      "probe_sql": "SELECT COUNT(*) AS unlinked_orders_count FROM orders WHERE customer_id NOT IN (SELECT customer_id FROM customers)",
+      "settles": "If the count is greater than 0, it confirms the issue. If the count is 0, it rules it out."
     }
   ]
 }
@@ -299,15 +299,19 @@ out, do not propose a fan-out hypothesis about it.
 **request**
 
 ```sql
-SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL
+SELECT status, COUNT(*) AS count FROM orders GROUP BY status
 ```
 
 **response**
 
 ```
-null_status_orders
-------------------
-80                
+status    | count
+----------+------
+NULL      | 80   
+cancelled | 143  
+completed | 1018 
+pending   | 170  
+refunded  | 89   
 ```
 
 ## 7. tool · `run_sql` · probe_2 · ok
@@ -315,19 +319,15 @@ null_status_orders
 **request**
 
 ```sql
-SELECT status, COUNT(*) AS status_count FROM orders GROUP BY status
+SELECT COUNT(*) AS null_status_count FROM orders WHERE status IS NULL
 ```
 
 **response**
 
 ```
-status    | status_count
-----------+-------------
-NULL      | 80          
-cancelled | 143         
-completed | 1018        
-pending   | 170         
-refunded  | 89          
+null_status_count
+-----------------
+80               
 ```
 
 ## 8. tool · `run_sql` · probe_3 · ok
@@ -335,15 +335,15 @@ refunded  | 89
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT order_id) AS refunded_orders FROM refunds
+SELECT COUNT(*) AS refunded_orders_count FROM orders o JOIN refunds r ON o.order_id = r.order_id
 ```
 
 **response**
 
 ```
-refunded_orders
----------------
-103            
+refunded_orders_count
+---------------------
+103                  
 ```
 
 ## 9. tool · `run_sql` · probe_4 · ok
@@ -351,20 +351,20 @@ refunded_orders
 **request**
 
 ```sql
-SELECT COUNT(*) AS unpaid_orders FROM orders WHERE order_id NOT IN (SELECT order_id FROM payments)
+SELECT COUNT(*) AS unlinked_orders_count FROM orders WHERE customer_id NOT IN (SELECT customer_id FROM customers)
 ```
 
 **response**
 
 ```
-unpaid_orders
--------------
-143          
+unlinked_orders_count
+---------------------
+0                    
 ```
 
 ## 10. model · adjudicate
 
-`gpt-4o-mini` · live call · 1272 in / 87 out · 1.22s
+`gpt-4o-mini` · live call · 1268 in / 81 out · 1.54s
 
 **system**
 
@@ -453,37 +453,37 @@ CREATE TABLE sessions (
 );
 
 Probes you designed, and what executing them actually returned:
-[1] risk: There may be orders with a NULL status that are not counted correctly due to the COALESCE function.
-    probe: SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL
+[1] risk: The status column in the orders table may contain unexpected values that are not accounted for in the query.
+    probe: SELECT status, COUNT(*) AS count FROM orders GROUP BY status
     returned:
-    null_status_orders
-    ------------------
-    80                
+    status    | count
+    ----------+------
+    NULL      | 80   
+    cancelled | 143  
+    completed | 1018 
+    pending   | 170  
+    refunded  | 89   
 
-[2] risk: There may be orders with a status that is not 'cancelled' but is also not accounted for in the query, such as 'pending' or 'completed'.
-    probe: SELECT status, COUNT(*) AS status_count FROM orders GROUP BY status
+[2] risk: There may be orders with NULL status that are not being counted correctly due to the COALESCE function.
+    probe: SELECT COUNT(*) AS null_status_count FROM orders WHERE status IS NULL
     returned:
-    status    | status_count
-    ----------+-------------
-    NULL      | 80          
-    cancelled | 143         
-    completed | 1018        
-    pending   | 170         
-    refunded  | 89          
+    null_status_count
+    -----------------
+    80               
 
-[3] risk: The query may not account for orders that have been refunded, which could imply they are not active.
-    probe: SELECT COUNT(DISTINCT order_id) AS refunded_orders FROM refunds
+[3] risk: The query may not account for orders that have been refunded but are still considered active.
+    probe: SELECT COUNT(*) AS refunded_orders_count FROM orders o JOIN refunds r ON o.order_id = r.order_id
     returned:
-    refunded_orders
-    ---------------
-    103            
+    refunded_orders_count
+    ---------------------
+    103                  
 
-[4] risk: There may be orders that have been created but not yet paid, which could affect the active order count.
-    probe: SELECT COUNT(*) AS unpaid_orders FROM orders WHERE order_id NOT IN (SELECT order_id FROM payments)
+[4] risk: There may be orders that are not linked to any customers, which could affect the interpretation of active orders.
+    probe: SELECT COUNT(*) AS unlinked_orders_count FROM orders WHERE customer_id NOT IN (SELECT customer_id FROM customers)
     returned:
-    unpaid_orders
-    -------------
-    143          
+    unlinked_orders_count
+    ---------------------
+    0                    
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
@@ -538,7 +538,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "The query correctly counts all orders that are not cancelled, including those with a NULL status, as per the business question. The independent recomputation confirms the result matches the original query. The counts from the orders table align with the expected outcome.",
+  "explanation": "The query correctly counts the number of active orders by including those with a NULL status as not cancelled. The independent recomputation confirms the result matches the original query, ensuring consistency in the count from the orders table.",
   "corrected_sql": null
 }
 ```

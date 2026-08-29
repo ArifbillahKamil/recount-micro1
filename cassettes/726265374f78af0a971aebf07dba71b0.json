@@ -1,7 +1,7 @@
 {
   "cassette_key": "726265374f78af0a971aebf07dba71b0",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:15:51Z",
+  "recorded_at": "2026-08-29T01:30:12Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI1xxXpqFYqfQNysLsioRAcOjpZjd",
+    "id": "chatcmpl-EI2BrFWG98rdEnZNBfYpbobUaYemn",
     "object": "chat.completion",
-    "created": 1787966169,
+    "created": 1787967031,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review does not filter for the currency 'IDR', which is necessary to accurately capture the revenue from Indonesian business. The independent recomputation correctly includes this filter and returns a different total revenue amount.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review does not filter for the currency 'IDR', which is necessary to accurately capture the revenue from Indonesian business orders. The independent recomputation correctly includes this filter and returns a different total revenue amount.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1001,
-      "completion_tokens": 126,
-      "total_tokens": 1127,
+      "completion_tokens": 127,
+      "total_tokens": 1128,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0
@@ -55,6 +55,6 @@
       }
     },
     "service_tier": "default",
-    "system_fingerprint": "fp_eef938a27b"
+    "system_fingerprint": "fp_f27dcc7f03"
   }
 }

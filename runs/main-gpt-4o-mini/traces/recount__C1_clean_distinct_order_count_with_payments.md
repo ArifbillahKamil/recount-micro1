@@ -1,6 +1,6 @@
 # Trajectory — recount — C1_clean_distinct_order_count_with_payments
 
-`3` model calls (`0` replayed from cassette) · `7` tool calls · `3505` tokens · `$0.00085`
+`3` model calls (`0` replayed from cassette) · `7` tool calls · `3558` tokens · `$0.00088`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -33,6 +33,10 @@ orders_seen | captured_cents
   "tables": [
     "orders",
     "payments"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -65,7 +69,7 @@ payments: 1683 rows, one row per payment_id
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · live call · 534 in / 77 out · 1.20s
+`gpt-4o-mini` · live call · 460 in / 96 out · 1.51s
 
 **system**
 
@@ -82,34 +86,30 @@ answer independently.
 Business question:
 For completed orders, how many orders are there and how much did we capture in total?
 
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+MEASURED COLUMN FACTS
 
 orders: 1500 rows, one row per order_id
   order_id: INTEGER, pk, 1500 distinct
   customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
+  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
+  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
   currency: TEXT, 2 distinct
 
 payments: 1683 rows, one row per payment_id
   payment_id: INTEGER, pk, 1683 distinct
   order_id: INTEGER, 1357 distinct
   amount_cents: INTEGER, 941 distinct
-  paid_ts: TEXT, 1672 distinct, range 2026-01-01 03:12:00 .. 2026-05-30 03:21:00
+  paid_ts: TEXT, 1672 distinct, values run '2026-01-01 03:12:00' .. '2026-05-30 03:21:00'
   method: TEXT, 4 distinct
+
+Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 orders_seen, captured_cents
@@ -122,7 +122,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL", "reasoning": "The query counts distinct completed orders and sums the payment amounts, ensuring only orders with a non-null status are included."}
+{"sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o LEFT JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL", "reasoning": "I counted distinct order_ids from the orders table where status is not NULL to ensure only completed orders are included, and summed the amount_cents from the payments table to capture the total amount for those orders."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -130,7 +130,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL
+SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o LEFT JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL
 ```
 
 **response**
@@ -138,12 +138,12 @@ SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS capture
 ```
 orders_seen | captured_cents
 ------------+---------------
-1277        | 6873525000    
+1420        | 6873525000    
 ```
 
 ## 5. model · plan
 
-`gpt-4o-mini` · live call · 784 in / 516 out · 5.96s
+`gpt-4o-mini` · live call · 784 in / 539 out · 6.02s
 
 **system**
 
@@ -229,25 +229,25 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "The payments table may have multiple entries for the same order_id, leading to inflated captured_cents.",
       "bug_type": "fanout_join",
       "probe_sql": "SELECT o.order_id, COUNT(p.payment_id) AS payment_count FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' GROUP BY o.order_id HAVING payment_count > 1",
-      "settles": "If this query returns rows, it confirms that multiple payments exist for some completed orders, indicating a potential inflation in captured_cents. If it returns no rows, this risk is ruled out."
+      "settles": "If this query returns rows, it confirms that multiple payments exist for some completed orders, indicating a fanout issue. If it returns no rows, this risk is ruled out."
     },
     {
-      "risk": "Some completed orders may not have corresponding payments, leading to an undercount of orders_seen.",
-      "bug_type": "left_join_degraded_to_inner",
-      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS completed_orders FROM orders o WHERE o.status = 'completed' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.order_id)",
-      "settles": "If this query returns a non-zero count, it indicates that there are completed orders without payments, suggesting that orders_seen is undercounted. If it returns zero, this risk is ruled out."
+      "risk": "Some completed orders may not have corresponding payments, leading to an undercount of orders or incorrect total captured_cents.",
+      "bug_type": "missing_filter",
+      "probe_sql": "SELECT COUNT(*) AS total_completed_orders, COUNT(DISTINCT p.order_id) AS total_orders_with_payments FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'",
+      "settles": "If total_completed_orders is greater than total_orders_with_payments, it confirms that some completed orders lack payments. If they are equal, this risk is ruled out."
     },
     {
-      "risk": "The status column in the orders table may contain NULL values, which could affect the count of completed orders.",
-      "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS null_status_count FROM orders WHERE status IS NULL",
-      "settles": "If this query returns a count greater than zero, it confirms that there are orders with NULL status, which could affect the results. If it returns zero, this risk is ruled out."
-    },
-    {
-      "risk": "The aggregation of captured_cents may be affected by different currencies, leading to mixed unit aggregation.",
+      "risk": "The query may be aggregating payments in different currencies without conversion, leading to incorrect captured_cents.",
       "bug_type": "mixed_unit_aggregation",
-      "probe_sql": "SELECT currency, SUM(amount_cents) AS total_captured FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' GROUP BY currency",
-      "settles": "If this query returns more than one currency, it indicates that captured_cents may be aggregated across different currencies, which could lead to misleading totals. If it returns only one currency, this risk is ruled out."
+      "probe_sql": "SELECT currency, SUM(amount_cents) AS total_captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' GROUP BY currency",
+      "settles": "If this query returns more than one currency, it indicates a mixed unit aggregation issue. If it returns only one currency, this risk is ruled out."
+    },
+    {
+      "risk": "The query may be excluding completed orders due to NULL values in the payments table, affecting the order count.",
+      "bug_type": "null_swallowing_predicate",
+      "probe_sql": "SELECT COUNT(*) AS total_completed_orders, COUNT(DISTINCT o.order_id) AS orders_with_payments FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND p.order_id IS NULL",
+      "settles": "If total_completed_orders is greater than orders_with_payments, it confirms that some completed orders are excluded due to NULL values in payments. If they are equal, this risk is ruled out."
     }
   ]
 }
@@ -286,15 +286,15 @@ order_id | payment_count
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT o.order_id) AS completed_orders FROM orders o WHERE o.status = 'completed' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.order_id)
+SELECT COUNT(*) AS total_completed_orders, COUNT(DISTINCT p.order_id) AS total_orders_with_payments FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
 ```
 
 **response**
 
 ```
-completed_orders
-----------------
-0               
+total_completed_orders | total_orders_with_payments
+-----------------------+---------------------------
+1250                   | 1018                      
 ```
 
 ## 8. tool · `run_sql` · probe_3 · ok
@@ -302,15 +302,16 @@ completed_orders
 **request**
 
 ```sql
-SELECT COUNT(*) AS null_status_count FROM orders WHERE status IS NULL
+SELECT currency, SUM(amount_cents) AS total_captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' GROUP BY currency
 ```
 
 **response**
 
 ```
-null_status_count
------------------
-80               
+currency | total_captured_cents
+---------+---------------------
+IDR      | 4743500000          
+USD      | 725420000           
 ```
 
 ## 9. tool · `run_sql` · probe_4 · ok
@@ -318,21 +319,20 @@ null_status_count
 **request**
 
 ```sql
-SELECT currency, SUM(amount_cents) AS total_captured FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' GROUP BY currency
+SELECT COUNT(*) AS total_completed_orders, COUNT(DISTINCT o.order_id) AS orders_with_payments FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND p.order_id IS NULL
 ```
 
 **response**
 
 ```
-currency | total_captured
----------+---------------
-IDR      | 4743500000    
-USD      | 725420000     
+total_completed_orders | orders_with_payments
+-----------------------+---------------------
+0                      | 0                   
 ```
 
 ## 10. model · adjudicate
 
-`gpt-4o-mini` · live call · 1457 in / 137 out · 2.00s
+`gpt-4o-mini` · live call · 1537 in / 142 out · 1.75s
 
 **system**
 
@@ -402,35 +402,35 @@ Probes you designed, and what executing them actually returned:
     56       | 2            
     ... 166 more row(s)
 
-[2] risk: Some completed orders may not have corresponding payments, leading to an undercount of orders_seen.
-    probe: SELECT COUNT(DISTINCT o.order_id) AS completed_orders FROM orders o WHERE o.status = 'completed' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.order_id)
+[2] risk: Some completed orders may not have corresponding payments, leading to an undercount of orders or incorrect total captured_cents.
+    probe: SELECT COUNT(*) AS total_completed_orders, COUNT(DISTINCT p.order_id) AS total_orders_with_payments FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
     returned:
-    completed_orders
-    ----------------
-    0               
+    total_completed_orders | total_orders_with_payments
+    -----------------------+---------------------------
+    1250                   | 1018                      
 
-[3] risk: The status column in the orders table may contain NULL values, which could affect the count of completed orders.
-    probe: SELECT COUNT(*) AS null_status_count FROM orders WHERE status IS NULL
+[3] risk: The query may be aggregating payments in different currencies without conversion, leading to incorrect captured_cents.
+    probe: SELECT currency, SUM(amount_cents) AS total_captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' GROUP BY currency
     returned:
-    null_status_count
-    -----------------
-    80               
+    currency | total_captured_cents
+    ---------+---------------------
+    IDR      | 4743500000          
+    USD      | 725420000           
 
-[4] risk: The aggregation of captured_cents may be affected by different currencies, leading to mixed unit aggregation.
-    probe: SELECT currency, SUM(amount_cents) AS total_captured FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' GROUP BY currency
+[4] risk: The query may be excluding completed orders due to NULL values in the payments table, affecting the order count.
+    probe: SELECT COUNT(*) AS total_completed_orders, COUNT(DISTINCT o.order_id) AS orders_with_payments FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND p.order_id IS NULL
     returned:
-    currency | total_captured
-    ---------+---------------
-    IDR      | 4743500000    
-    USD      | 725420000     
+    total_completed_orders | orders_with_payments
+    -----------------------+---------------------
+    0                      | 0                   
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL
+  sql: SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o LEFT JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL
   returned:
     orders_seen | captured_cents
     ------------+---------------
-    1277        | 6873525000    
+    1420        | 6873525000    
 
   the query under review returned:
     orders_seen | captured_cents
@@ -477,8 +477,8 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "fanout_join",
   "confidence": 0.9,
-  "explanation": "The query under review counts distinct orders and sums payments, but the payments table has multiple entries for some orders, leading to inflated captured_cents. The independent recomputation shows a different count of orders and total captured amount, indicating a discrepancy.",
-  "corrected_sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(DISTINCT p.amount_cents) AS captured_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status = 'completed'"
+  "explanation": "The query under review counts distinct orders and sums payments, but the payments table has multiple entries for some orders, leading to inflated captured_cents. The independent recomputation shows a higher order count and total captured_cents, indicating discrepancies due to the join behavior.",
+  "corrected_sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(DISTINCT p.amount_cents) AS captured_cents FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```
 
@@ -493,6 +493,6 @@ The reviewer's correction and the independent derivation disagree on the correct
 ```json
 {
   "reported": "orders_seen | captured_cents\n------------+---------------\n1018        | 5468920000    ",
-  "recomputed": "orders_seen | captured_cents\n------------+---------------\n1277        | 6873525000    "
+  "recomputed": "orders_seen | captured_cents\n------------+---------------\n1420        | 6873525000    "
 }
 ```

@@ -1,6 +1,6 @@
 # Trajectory — recount — B6_timezone_day_misattribution
 
-`2` model calls (`1` replayed from cassette) · `2` tool calls · `1800` tokens · `$0.00035`
+`2` model calls (`1` replayed from cassette) · `2` tool calls · `1804` tokens · `$0.00035`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -28,7 +28,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 596 in / 68 out · 0.00s
+`gpt-4o-mini` · replayed · 600 in / 68 out · 0.00s
 
 **system**
 
@@ -111,8 +111,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 orders_on_day
@@ -150,7 +150,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1020 in / 116 out · 1.89s
+`gpt-4o-mini` · live call · 1020 in / 116 out · 1.91s
 
 **system**
 

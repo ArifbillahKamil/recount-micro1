@@ -1,7 +1,7 @@
 {
   "cassette_key": "236da8ee1c90d944fde1758094e9d3c9",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:16:47Z",
+  "recorded_at": "2026-08-29T01:31:15Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI1yqxZyA3tXmFKKap3tCrEekfnQB",
+    "id": "chatcmpl-EI2CrkTfkXRJ5EnY78FmlAxWo4bmM",
     "object": "chat.completion",
-    "created": 1787966224,
+    "created": 1787967093,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"date_range_truncation\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review uses a date range that does not include the full UTC timestamps for January 2026, which may lead to missing orders. The independent recomputation returned a different count, indicating that the original query likely truncated some orders due to the date range specified.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"timezone_day_boundary\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review uses a date range that does not account for the UTC timezone properly, which may lead to missing orders that fall on the boundary of the specified dates. The independent recomputation returned a different count, indicating that the original query may have excluded some orders due to this issue.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1027,
-      "completion_tokens": 144,
-      "total_tokens": 1171,
+      "completion_tokens": 146,
+      "total_tokens": 1173,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0
@@ -55,6 +55,6 @@
       }
     },
     "service_tier": "default",
-    "system_fingerprint": "fp_83afc1e615"
+    "system_fingerprint": "fp_727abf95d6"
   }
 }

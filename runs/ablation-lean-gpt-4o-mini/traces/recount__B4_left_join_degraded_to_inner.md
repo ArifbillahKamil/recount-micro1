@@ -1,6 +1,6 @@
 # Trajectory — recount — B4_left_join_degraded_to_inner
 
-`2` model calls (`1` replayed from cassette) · `2` tool calls · `1917` tokens · `$0.00039`
+`2` model calls (`1` replayed from cassette) · `2` tool calls · `1912` tokens · `$0.00039`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -30,7 +30,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 596 in / 77 out · 0.00s
+`gpt-4o-mini` · replayed · 600 in / 77 out · 0.00s
 
 **system**
 
@@ -113,8 +113,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 orders_seen, refunded_cents
@@ -152,7 +152,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1089 in / 155 out · 2.10s
+`gpt-4o-mini` · live call · 1089 in / 146 out · 5.77s
 
 **system**
 
@@ -298,7 +298,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "wrong_aggregation_grain",
   "confidence": 0.9,
-  "explanation": "The query under review counts orders incorrectly by not using DISTINCT, leading to a significantly lower count of orders seen (103 vs 1500). The aggregation should reflect the total number of unique orders from the 'orders' table, which is not achieved due to the way the join with the 'refunds' table is structured.",
+  "explanation": "The query under review counts orders based on the refunds table, which leads to a significant discrepancy in the number of orders seen (103 vs 1500). The correct approach should count distinct orders from the orders table, ensuring that all orders are included regardless of whether they have refunds.",
   "corrected_sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id"
 }
 ```

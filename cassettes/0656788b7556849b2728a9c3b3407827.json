@@ -1,7 +1,7 @@
 {
   "cassette_key": "0656788b7556849b2728a9c3b3407827",
   "step": "plan",
-  "recorded_at": "2026-08-29T01:14:48Z",
+  "recorded_at": "2026-08-29T01:29:04Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI1wuGKY3VbLJVcNKpJgkH1fTJBfB",
+    "id": "chatcmpl-EI2AiiHRPNv01VLY0PDLukigdbLyc",
     "object": "chat.completion",
-    "created": 1787966104,
+    "created": 1787966960,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"hypotheses\": [\n    {\n      \"risk\": \"The query may include payments from orders that are not in IDR currency\",\n      \"bug_type\": \"missing_filter\",\n      \"probe_sql\": \"SELECT COUNT(*) FROM orders o WHERE o.status = 'completed' AND o.currency != 'IDR'\",\n      \"settles\": \"A count greater than 0 would confirm this issue, while a count of 0 would rule it out\"\n    },\n    {\n      \"risk\": \"The query may include payments for refunded orders\",\n      \"bug_type\": \"missing_filter\",\n      \"probe_sql\": \"SELECT SUM(p.amount_cents) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.order_id IN (SELECT order_id FROM refunds)\",\n      \"settles\": \"A non-zero sum would confirm this issue, while a sum of 0 would rule it out\"\n    },\n    {\n      \"risk\": \"The query may not account for the possibility of multiple payments per order\",\n      \"bug_type\": \"wrong_aggregation_grain\",\n      \"probe_sql\": \"SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(p.payment_id) AS total_payments FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'\",\n      \"settles\": \"If distinct_orders is less than total_payments, it would confirm this issue, while equality would rule it out\"\n    },\n    {\n      \"risk\": \"The query may include payments that are not completed due to a timing issue\",\n      \"bug_type\": \"timezone_day_boundary\",\n      \"probe_sql\": \"SELECT COUNT(*) FROM payments p WHERE p.paid_ts < (SELECT MIN(order_ts) FROM orders o WHERE o.status = 'completed')\",\n      \"settles\": \"A count greater than 0 would confirm this issue, while a count of 0 would rule it out\"\n    }\n  ]\n}",
+          "content": "{\n  \"hypotheses\": [\n    {\n      \"risk\": \"The query may include payments from orders that are not in IDR currency.\",\n      \"bug_type\": \"missing_filter\",\n      \"probe_sql\": \"SELECT COUNT(*) FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency != 'IDR'\",\n      \"settles\": \"A count greater than 0 would confirm this issue, while a count of 0 would rule it out.\"\n    },\n    {\n      \"risk\": \"The query may include payments from orders that have been refunded.\",\n      \"bug_type\": \"missing_filter\",\n      \"probe_sql\": \"SELECT SUM(p.amount_cents) FROM orders o JOIN payments p ON p.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.refund_id IS NOT NULL\",\n      \"settles\": \"A non-zero sum would confirm this issue, while a sum of 0 would rule it out.\"\n    },\n    {\n      \"risk\": \"The query may not account for the possibility of multiple payments for a single order.\",\n      \"bug_type\": \"fanout_join\",\n      \"probe_sql\": \"SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(p.payment_id) AS total_payments FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'\",\n      \"settles\": \"If total_payments is greater than distinct_orders, it would confirm this issue, while equality would rule it out.\"\n    },\n    {\n      \"risk\": \"The query may include payments that are not completed due to a null status in the orders table.\",\n      \"bug_type\": \"null_swallowing_predicate\",\n      \"probe_sql\": \"SELECT COUNT(*) FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status IS NULL\",\n      \"settles\": \"A count greater than 0 would confirm this issue, while a count of 0 would rule it out.\"\n    }\n  ]\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 826,
-      "completion_tokens": 408,
-      "total_tokens": 1234,
+      "completion_tokens": 433,
+      "total_tokens": 1259,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

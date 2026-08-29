@@ -1,7 +1,7 @@
 {
   "cassette_key": "66dca377652a6142f5cdc55732c80302",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:16:43Z",
+  "recorded_at": "2026-08-29T01:31:11Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI1yoOnqo4dQk9FRa3NgYCynpdFA9",
+    "id": "chatcmpl-EI2CoqeQ5u2ogWotVgs0gz3yKIjjJ",
     "object": "chat.completion",
-    "created": 1787966222,
+    "created": 1787967090,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 1,\n  \"explanation\": \"The query correctly sums the quantity of order items from the order_items table, filtered by completed orders in the orders table. Both the query under review and the independent recomputation returned the same result of 2993 units sold. This confirms that the SQL accurately answers the business question.\",\n  \"corrected_sql\": null\n}",
+          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 1.0,\n  \"explanation\": \"The query correctly sums the quantity of order items from the order_items table, filtered by completed orders in the orders table. Both the query under review and the independent recomputation returned the same result of 2993 units sold. This confirms that the SQL accurately answers the business question.\",\n  \"corrected_sql\": null\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1011,
-      "completion_tokens": 95,
-      "total_tokens": 1106,
+      "completion_tokens": 97,
+      "total_tokens": 1108,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0
@@ -55,6 +55,6 @@
       }
     },
     "service_tier": "default",
-    "system_fingerprint": "fp_f92f00b8af"
+    "system_fingerprint": "fp_5b6abc5941"
   }
 }

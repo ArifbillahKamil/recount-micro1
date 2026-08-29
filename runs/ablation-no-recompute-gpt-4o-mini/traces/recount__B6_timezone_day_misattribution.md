@@ -1,6 +1,6 @@
 # Trajectory — recount — B6_timezone_day_misattribution
 
-`2` model calls (`1` replayed from cassette) · `7` tool calls · `2433` tokens · `$0.00065`
+`2` model calls (`1` replayed from cassette) · `7` tool calls · `2426` tokens · `$0.00064`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -30,6 +30,10 @@ orders_on_day
 {
   "tables": [
     "orders"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -59,7 +63,7 @@ Independent recomputation disabled for this run.
 
 ## 4. model · plan
 
-`gpt-4o-mini` · replayed · 661 in / 476 out · 0.00s
+`gpt-4o-mini` · replayed · 661 in / 482 out · 0.00s
 
 **system**
 
@@ -136,25 +140,25 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "The order timestamps may not be correctly interpreted in the Asia/Jakarta timezone, leading to incorrect date filtering.",
       "bug_type": "timezone_day_boundary",
       "probe_sql": "SELECT COUNT(*) AS orders_on_day_jakarta FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'",
-      "settles": "If the result is different from 12, it confirms the timezone issue; if it is the same, the issue is ruled out."
+      "settles": "If the result is different from 12, it confirms the timezone issue; if it is the same, the timezone is not the problem."
     },
     {
       "risk": "Some orders may have a NULL status, which could affect the count if there are additional filters on status not included in the query.",
       "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS total_orders, COUNT(status) AS non_null_status_orders FROM orders",
-      "settles": "If total_orders is greater than non_null_status_orders, it confirms the presence of NULLs; if they are equal, the issue is ruled out."
+      "probe_sql": "SELECT COUNT(*) AS total_orders, COUNT(status) AS orders_with_status FROM orders",
+      "settles": "If total_orders is greater than orders_with_status, it confirms that NULL statuses are present; if they are equal, this is not the issue."
     },
     {
-      "risk": "The order timestamps may not cover the entire day of 31 January 2026 due to the range of order_ts, potentially missing orders placed late in the day.",
+      "risk": "The order timestamps may not cover the entire day due to the time range of the data, potentially missing orders placed late in the day.",
       "bug_type": "date_range_truncation",
       "probe_sql": "SELECT MIN(order_ts) AS earliest_order, MAX(order_ts) AS latest_order FROM orders",
-      "settles": "If the latest_order is before '2026-01-31 23:59:59', it confirms the truncation issue; if it is after, the issue is ruled out."
+      "settles": "If the latest_order is before '2026-01-31 23:59:59', it confirms the truncation issue; if it is after, this is not the problem."
     },
     {
-      "risk": "The query may not account for orders that were placed just before or after the local day boundary due to timezone differences.",
+      "risk": "The query may not account for orders that were placed just before the end of the day in UTC, which could be counted as the next day in Jakarta.",
       "bug_type": "timezone_day_boundary",
-      "probe_sql": "SELECT COUNT(*) AS orders_before_boundary FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'",
-      "settles": "If the result is different from 12, it confirms the boundary issue; if it is the same, the issue is ruled out."
+      "probe_sql": "SELECT COUNT(*) AS orders_before_jakarta_day_end FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'",
+      "settles": "If this count is greater than 12, it confirms the boundary issue; if it is 12 or less, this is not the issue."
     }
   ]
 }
@@ -181,15 +185,15 @@ orders_on_day_jakarta
 **request**
 
 ```sql
-SELECT COUNT(*) AS total_orders, COUNT(status) AS non_null_status_orders FROM orders
+SELECT COUNT(*) AS total_orders, COUNT(status) AS orders_with_status FROM orders
 ```
 
 **response**
 
 ```
-total_orders | non_null_status_orders
--------------+-----------------------
-1500         | 1420                  
+total_orders | orders_with_status
+-------------+-------------------
+1500         | 1420              
 ```
 
 ## 7. tool · `run_sql` · probe_3 · ok
@@ -213,20 +217,20 @@ earliest_order      | latest_order
 **request**
 
 ```sql
-SELECT COUNT(*) AS orders_before_boundary FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'
+SELECT COUNT(*) AS orders_before_jakarta_day_end FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'
 ```
 
 **response**
 
 ```
-orders_before_boundary
-----------------------
-12                    
+orders_before_jakarta_day_end
+-----------------------------
+12                           
 ```
 
 ## 9. model · adjudicate
 
-`gpt-4o-mini` · live call · 1134 in / 162 out · 2.22s
+`gpt-4o-mini` · live call · 1140 in / 143 out · 3.32s
 
 **system**
 
@@ -276,25 +280,25 @@ Probes you designed, and what executing them actually returned:
     19                   
 
 [2] risk: Some orders may have a NULL status, which could affect the count if there are additional filters on status not included in the query.
-    probe: SELECT COUNT(*) AS total_orders, COUNT(status) AS non_null_status_orders FROM orders
+    probe: SELECT COUNT(*) AS total_orders, COUNT(status) AS orders_with_status FROM orders
     returned:
-    total_orders | non_null_status_orders
-    -------------+-----------------------
-    1500         | 1420                  
+    total_orders | orders_with_status
+    -------------+-------------------
+    1500         | 1420              
 
-[3] risk: The order timestamps may not cover the entire day of 31 January 2026 due to the range of order_ts, potentially missing orders placed late in the day.
+[3] risk: The order timestamps may not cover the entire day due to the time range of the data, potentially missing orders placed late in the day.
     probe: SELECT MIN(order_ts) AS earliest_order, MAX(order_ts) AS latest_order FROM orders
     returned:
     earliest_order      | latest_order       
     --------------------+--------------------
     2026-01-01 02:11:00 | 2026-03-31 21:27:00
 
-[4] risk: The query may not account for orders that were placed just before or after the local day boundary due to timezone differences.
-    probe: SELECT COUNT(*) AS orders_before_boundary FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'
+[4] risk: The query may not account for orders that were placed just before the end of the day in UTC, which could be counted as the next day in Jakarta.
+    probe: SELECT COUNT(*) AS orders_before_jakarta_day_end FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'
     returned:
-    orders_before_boundary
-    ----------------------
-    12                    
+    orders_before_jakarta_day_end
+    -----------------------------
+    12                           
 
 Independent recomputation: not attempted.
 
@@ -338,8 +342,8 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "timezone_day_boundary",
   "confidence": 0.9,
-  "explanation": "The query does not account for the timezone difference, leading to an incorrect count of orders on the local day of 31 January 2026. The probe for local time returned 19 orders, indicating that the original query missed orders due to timezone misinterpretation. The orders table's timestamps need to be adjusted for the Asia/Jakarta timezone to accurately reflect the local day.",
-  "corrected_sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'"
+  "explanation": "The query does not account for the timezone difference, leading to an incorrect count of orders placed on 31 January 2026 in the Asia/Jakarta timezone. The probe indicates that there are 19 orders when correctly accounting for local time, while the original query returned only 12. This discrepancy suggests that the date filtering is not accurately reflecting the local day.",
+  "corrected_sql": "SELECT COUNT(*) AS orders_on_day_jakarta FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'"
 }
 ```
 
@@ -348,23 +352,24 @@ actually lives at that finer grain.
 **request**
 
 ```sql
-SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'
+SELECT COUNT(*) AS orders_on_day_jakarta FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'
 ```
 
 **response**
 
 ```
-orders_on_day
--------------
-12           
+orders_on_day_jakarta
+---------------------
+19                   
 ```
 
 ## 11. gate · verification_gate
 
-**CLEAN** — the proposed correction returns exactly the original result, so the original query already answers the question
+**BUG** — the correction executes and returns a different result, so the discrepancy is demonstrated
 
 ```json
 {
-  "result": "orders_on_day\n-------------\n12           "
+  "reported": "orders_on_day\n-------------\n12           ",
+  "corrected": "orders_on_day_jakarta\n---------------------\n19                   "
 }
 ```

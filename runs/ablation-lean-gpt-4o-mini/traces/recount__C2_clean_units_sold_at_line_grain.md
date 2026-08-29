@@ -1,6 +1,6 @@
 # Trajectory — recount — C2_clean_units_sold_at_line_grain
 
-`2` model calls (`1` replayed from cassette) · `2` tool calls · `1753` tokens · `$0.00034`
+`2` model calls (`1` replayed from cassette) · `2` tool calls · `1759` tokens · `$0.00034`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -29,7 +29,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 577 in / 70 out · 0.00s
+`gpt-4o-mini` · replayed · 581 in / 70 out · 0.00s
 
 **system**
 
@@ -112,8 +112,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 units_sold
@@ -151,7 +151,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1011 in / 95 out · 1.60s
+`gpt-4o-mini` · live call · 1011 in / 97 out · 1.38s
 
 **system**
 
@@ -295,7 +295,7 @@ actually lives at that finer grain.
 {
   "verdict": "CLEAN",
   "bug_type": null,
-  "confidence": 1,
+  "confidence": 1.0,
   "explanation": "The query correctly sums the quantity of order items from the order_items table, filtered by completed orders in the orders table. Both the query under review and the independent recomputation returned the same result of 2993 units sold. This confirms that the SQL accurately answers the business question.",
   "corrected_sql": null
 }

@@ -1,6 +1,6 @@
 # Trajectory — recount — C4_clean_half_open_date_range
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1474` tokens · `$0.00030`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1460` tokens · `$0.00032`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -30,6 +30,10 @@ january_orders
 {
   "tables": [
     "orders"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -55,7 +59,7 @@ orders: 1500 rows, one row per order_id
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 430 in / 78 out · 0.00s
+`gpt-4o-mini` · replayed · 354 in / 84 out · 0.00s
 
 **system**
 
@@ -72,27 +76,23 @@ answer independently.
 Business question:
 How many orders were placed during January 2026, in UTC?
 
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+MEASURED COLUMN FACTS
 
 orders: 1500 rows, one row per order_id
   order_id: INTEGER, pk, 1500 distinct
   customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
+  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
+  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
   currency: TEXT, 2 distinct
+
+Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 january_orders
@@ -105,7 +105,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'", "reasoning": "I filtered the orders table for timestamps in January 2026 to count the total number of orders placed during that month."}
+{"sql": "SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL", "reasoning": "I counted the order_id for orders placed in January 2026, ensuring to filter out any NULL statuses."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -113,7 +113,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'
+SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
 ```
 
 **response**
@@ -121,7 +121,7 @@ SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:0
 ```
 january_orders
 --------------
-551           
+520           
 ```
 
 ## 5. note · probes_disabled
@@ -130,7 +130,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 874 in / 92 out · 1.72s
+`gpt-4o-mini` · live call · 882 in / 140 out · 2.59s
 
 **system**
 
@@ -176,11 +176,11 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'
+  sql: SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
   returned:
     january_orders
     --------------
-    551           
+    520           
 
   the query under review returned:
     january_orders
@@ -224,20 +224,21 @@ actually lives at that finer grain.
 
 ```json
 {
-  "verdict": "CLEAN",
-  "bug_type": null,
-  "confidence": 1,
-  "explanation": "The query correctly counts the number of orders placed in January 2026 based on the order_ts timestamp. Both the query under review and the independent recomputation returned the same result of 551 orders. The date range specified in the query aligns with the business question.",
-  "corrected_sql": null
+  "verdict": "BUG",
+  "bug_type": "missing_filter",
+  "confidence": 0.9,
+  "explanation": "The query under review counts all orders regardless of their status, while the independent recomputation filters out orders with a NULL status. This discrepancy indicates that the query does not accurately reflect the number of valid orders placed in January 2026.",
+  "corrected_sql": "SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL"
 }
 ```
 
 ## 7. gate · verification_gate
 
-**CLEAN** — an independently derived query returns the same number, corroborating the reported result
+**BUG** — an independently derived query returns a different number, demonstrating the discrepancy
 
 ```json
 {
-  "both_returned": "january_orders\n--------------\n551           "
+  "reported": "january_orders\n--------------\n551           ",
+  "recomputed": "january_orders\n--------------\n520           "
 }
 ```

@@ -1,7 +1,7 @@
 {
   "cassette_key": "4d4766ee8f34f79a5b7bab8c0f7144e2",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:16:29Z",
+  "recorded_at": "2026-08-29T01:30:54Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI1yalJEN9KQahEw6zWOHpHf78orX",
+    "id": "chatcmpl-EI2CXaPns7MqqHY0jq7FCv21y4puK",
     "object": "chat.completion",
-    "created": 1787966208,
+    "created": 1787967073,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review counts orders with a status that is not 'cancelled', but it does not account for orders that have a NULL status, which are also considered active. The independent recomputation correctly includes these NULL statuses, resulting in a higher count from the orders table.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review counts orders with a status that is not 'cancelled', but it does not account for orders that have a NULL status, which are still considered active. The independent recomputation correctly includes these NULL statuses, resulting in a higher count from the orders table.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -55,6 +55,6 @@
       }
     },
     "service_tier": "default",
-    "system_fingerprint": "fp_18fc98c6d2"
+    "system_fingerprint": "fp_8c012bb801"
   }
 }

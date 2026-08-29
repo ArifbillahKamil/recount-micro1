@@ -1,6 +1,6 @@
 # Trajectory — recount — B7_mixed_currency_unit_error
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1750` tokens · `$0.00036`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1678` tokens · `$0.00035`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -32,6 +32,10 @@ idr_revenue_cents
   "tables": [
     "orders",
     "payments"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -64,7 +68,7 @@ payments: 1683 rows, one row per payment_id
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 539 in / 84 out · 0.00s
+`gpt-4o-mini` · replayed · 465 in / 85 out · 0.00s
 
 **system**
 
@@ -81,34 +85,30 @@ answer independently.
 Business question:
 What is the total captured revenue of the Indonesian business (IDR-denominated orders) from completed orders, in cents?
 
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+MEASURED COLUMN FACTS
 
 orders: 1500 rows, one row per order_id
   order_id: INTEGER, pk, 1500 distinct
   customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
+  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
+  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
   currency: TEXT, 2 distinct
 
 payments: 1683 rows, one row per payment_id
   payment_id: INTEGER, pk, 1683 distinct
   order_id: INTEGER, 1357 distinct
   amount_cents: INTEGER, 941 distinct
-  paid_ts: TEXT, 1672 distinct, range 2026-01-01 03:12:00 .. 2026-05-30 03:21:00
+  paid_ts: TEXT, 1672 distinct, values run '2026-01-01 03:12:00' .. '2026-05-30 03:21:00'
   method: TEXT, 4 distinct
+
+Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 idr_revenue_cents
@@ -121,7 +121,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.currency = 'IDR'", "reasoning": "The query sums the payment amounts in cents for completed orders (non-null status) that are denominated in IDR, ensuring we capture only the relevant revenue."}
+{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.currency = 'IDR'", "reasoning": "I joined the orders and payments tables on order_id, filtered for completed orders (non-null status) in IDR currency, and summed the payment amounts in cents."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -146,7 +146,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1001 in / 126 out · 1.57s
+`gpt-4o-mini` · live call · 1001 in / 127 out · 1.29s
 
 **system**
 
@@ -251,7 +251,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query under review does not filter for the currency 'IDR', which is necessary to accurately capture the revenue from Indonesian business. The independent recomputation correctly includes this filter and returns a different total revenue amount.",
+  "explanation": "The query under review does not filter for the currency 'IDR', which is necessary to accurately capture the revenue from Indonesian business orders. The independent recomputation correctly includes this filter and returns a different total revenue amount.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'"
 }
 ```

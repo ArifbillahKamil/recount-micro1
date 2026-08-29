@@ -1,6 +1,6 @@
 # Trajectory — recount — B8_missing_status_filter
 
-`2` model calls (`1` replayed from cassette) · `2` tool calls · `1780` tokens · `$0.00035`
+`2` model calls (`1` replayed from cassette) · `2` tool calls · `1793` tokens · `$0.00036`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -28,7 +28,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 581 in / 67 out · 0.00s
+`gpt-4o-mini` · replayed · 585 in / 67 out · 0.00s
 
 **system**
 
@@ -111,8 +111,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 revenue_cents
@@ -150,7 +150,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1015 in / 117 out · 1.73s
+`gpt-4o-mini` · live call · 1015 in / 126 out · 1.77s
 
 **system**
 
@@ -293,8 +293,8 @@ actually lives at that finer grain.
 {
   "verdict": "BUG",
   "bug_type": "missing_filter",
-  "confidence": 0.95,
-  "explanation": "The query under review does not filter for completed orders, which is necessary to accurately capture revenue from completed orders only. The independent recomputation correctly includes this filter by checking the status of orders in the 'orders' table.",
+  "confidence": 0.9,
+  "explanation": "The query under review does not filter for completed orders, which is necessary to accurately calculate revenue from completed orders. The independent recomputation correctly includes this filter, resulting in a different revenue total. The discrepancy indicates that the original query is not aligned with the business question.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```

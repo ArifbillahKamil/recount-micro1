@@ -1,6 +1,6 @@
 # Trajectory — recount — B8_missing_status_filter
 
-`4` model calls (`0` replayed from cassette) · `7` tool calls · `3396` tokens · `$0.00078`
+`3` model calls (`0` replayed from cassette) · `6` tool calls · `3144` tokens · `$0.00071`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -28,7 +28,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · live call · 581 in / 67 out · 1.20s
+`gpt-4o-mini` · live call · 585 in / 67 out · 1.08s
 
 **system**
 
@@ -111,8 +111,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 revenue_cents
@@ -146,7 +146,7 @@ revenue_cents
 
 ## 5. model · plan
 
-`gpt-4o-mini` · live call · 802 in / 378 out · 6.27s
+`gpt-4o-mini` · live call · 802 in / 345 out · 5.84s
 
 **system**
 
@@ -269,26 +269,26 @@ out, do not propose a fan-out hypothesis about it.
     {
       "risk": "The query may include payments for orders that are not completed.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) FROM orders WHERE status IS NULL OR status != 'completed'",
+      "probe_sql": "SELECT COUNT(*) FROM orders WHERE status != 'completed'",
       "settles": "If the count is greater than 0, it confirms the issue; if 0, it rules it out."
     },
     {
       "risk": "The query may include payments for orders that have been refunded.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT SUM(p.amount_cents) FROM payments p JOIN orders o ON p.order_id = o.order_id JOIN refunds r ON o.order_id = r.order_id",
-      "settles": "If the sum is greater than 0, it confirms the issue; if 0, it rules it out."
+      "probe_sql": "SELECT COUNT(*) FROM refunds r JOIN orders o ON r.order_id = o.order_id",
+      "settles": "If the count is greater than 0, it confirms the issue; if 0, it rules it out."
     },
     {
       "risk": "The query may double count payments due to multiple payments for a single order.",
       "bug_type": "fanout_join",
-      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(p.payment_id) AS total_payments FROM orders o JOIN payments p ON p.order_id = o.order_id",
-      "settles": "If total_payments is greater than distinct_orders, it confirms the issue; if equal, it rules it out."
+      "probe_sql": "SELECT COUNT(DISTINCT p.order_id) FROM payments p JOIN orders o ON p.order_id = o.order_id",
+      "settles": "If this count is less than the total count of payments, it confirms the issue; if equal, it rules it out."
     },
     {
-      "risk": "The query may not account for currency differences if payments are in different currencies.",
+      "risk": "The query may not account for currency differences if orders are in different currencies.",
       "bug_type": "mixed_unit_aggregation",
-      "probe_sql": "SELECT currency, SUM(amount_cents) FROM payments GROUP BY currency",
-      "settles": "If there are multiple currencies returned, it confirms the issue; if only one currency, it rules it out."
+      "probe_sql": "SELECT COUNT(DISTINCT currency) FROM orders",
+      "settles": "If the count is greater than 1, it confirms the issue; if 1, it rules it out."
     }
   ]
 }
@@ -299,7 +299,7 @@ out, do not propose a fan-out hypothesis about it.
 **request**
 
 ```sql
-SELECT COUNT(*) FROM orders WHERE status IS NULL OR status != 'completed'
+SELECT COUNT(*) FROM orders WHERE status != 'completed'
 ```
 
 **response**
@@ -307,7 +307,7 @@ SELECT COUNT(*) FROM orders WHERE status IS NULL OR status != 'completed'
 ```
 COUNT(*)
 --------
-482     
+402     
 ```
 
 ## 7. tool · `run_sql` · probe_2 · ok
@@ -315,15 +315,15 @@ COUNT(*)
 **request**
 
 ```sql
-SELECT SUM(p.amount_cents) FROM payments p JOIN orders o ON p.order_id = o.order_id JOIN refunds r ON o.order_id = r.order_id
+SELECT COUNT(*) FROM refunds r JOIN orders o ON r.order_id = o.order_id
 ```
 
 **response**
 
 ```
-SUM(p.amount_cents)
--------------------
-532805000          
+COUNT(*)
+--------
+103     
 ```
 
 ## 8. tool · `run_sql` · probe_3 · ok
@@ -331,93 +331,36 @@ SUM(p.amount_cents)
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(p.payment_id) AS total_payments FROM orders o JOIN payments p ON p.order_id = o.order_id
+SELECT COUNT(DISTINCT p.order_id) FROM payments p JOIN orders o ON p.order_id = o.order_id
 ```
 
 **response**
 
 ```
-distinct_orders | total_payments
-----------------+---------------
-1357            | 1683          
+COUNT(DISTINCT p.order_id)
+--------------------------
+1357                      
 ```
 
-## 9. tool · `run_sql` · probe_4 · FAILED
+## 9. tool · `run_sql` · probe_4 · ok
 
 **request**
 
 ```sql
-SELECT currency, SUM(amount_cents) FROM payments GROUP BY currency
+SELECT COUNT(DISTINCT currency) FROM orders
 ```
 
 **response**
 
 ```
-no such column: currency
+COUNT(DISTINCT currency)
+------------------------
+2                       
 ```
 
-## 10. note · probe_repair
+## 10. model · adjudicate
 
-1 probe(s) failed to execute; asking for a rewrite.
-
-```json
-{
-  "failed_indices": [
-    4
-  ]
-}
-```
-
-## 11. model · probe_repair
-
-`gpt-4o-mini` · live call · 147 in / 22 out · 1.66s
-
-**system**
-
-```
-You are a senior analytics engineer who has been burned by
-queries that run cleanly and return the wrong number. You do not speculate: you
-design a measurement that would settle each suspicion.
-```
-
-**user**
-
-```
-Some probes failed to execute. Rewrite only those, keeping
-the same intent. This database is SQLite.
-
-[4] intent: The query may not account for currency differences if payments are in different currencies.
-    sql: SELECT currency, SUM(amount_cents) FROM payments GROUP BY currency
-    error: no such column: currency
-
-Reply with one JSON object and nothing else:
-
-{"probes": [{"index": <original index>, "probe_sql": "a single SELECT"}]}
-```
-
-**assistant**
-
-```json
-{"probes": [{"index": 4, "probe_sql": "SELECT DISTINCT currency FROM payments"}]}
-```
-
-## 12. tool · `run_sql` · probe_4 · FAILED
-
-**request**
-
-```sql
-SELECT DISTINCT currency FROM payments
-```
-
-**response**
-
-```
-no such column: currency
-```
-
-## 13. model · adjudicate
-
-`gpt-4o-mini` · live call · 1259 in / 140 out · 1.67s
+`gpt-4o-mini` · live call · 1226 in / 119 out · 1.65s
 
 **system**
 
@@ -507,29 +450,32 @@ CREATE TABLE sessions (
 
 Probes you designed, and what executing them actually returned:
 [1] risk: The query may include payments for orders that are not completed.
-    probe: SELECT COUNT(*) FROM orders WHERE status IS NULL OR status != 'completed'
+    probe: SELECT COUNT(*) FROM orders WHERE status != 'completed'
     returned:
     COUNT(*)
     --------
-    482     
+    402     
 
 [2] risk: The query may include payments for orders that have been refunded.
-    probe: SELECT SUM(p.amount_cents) FROM payments p JOIN orders o ON p.order_id = o.order_id JOIN refunds r ON o.order_id = r.order_id
+    probe: SELECT COUNT(*) FROM refunds r JOIN orders o ON r.order_id = o.order_id
     returned:
-    SUM(p.amount_cents)
-    -------------------
-    532805000          
+    COUNT(*)
+    --------
+    103     
 
 [3] risk: The query may double count payments due to multiple payments for a single order.
-    probe: SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(p.payment_id) AS total_payments FROM orders o JOIN payments p ON p.order_id = o.order_id
+    probe: SELECT COUNT(DISTINCT p.order_id) FROM payments p JOIN orders o ON p.order_id = o.order_id
     returned:
-    distinct_orders | total_payments
-    ----------------+---------------
-    1357            | 1683          
+    COUNT(DISTINCT p.order_id)
+    --------------------------
+    1357                      
 
-[4] risk: The query may not account for currency differences if payments are in different currencies.
-    probe: SELECT DISTINCT currency FROM payments
-    FAILED TO EXECUTE: no such column: currency
+[4] risk: The query may not account for currency differences if orders are in different currencies.
+    probe: SELECT COUNT(DISTINCT currency) FROM orders
+    returned:
+    COUNT(DISTINCT currency)
+    ------------------------
+    2                       
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
@@ -584,16 +530,12 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query does not filter out orders that are not completed, as evidenced by the probe showing 482 incomplete orders. Additionally, it does not account for refunds, which could inflate the revenue figure. The independent recomputation correctly filters for completed orders and returns a different total.",
-  "corrected_sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.order_id NOT IN (SELECT order_id FROM refunds)"
+  "explanation": "The query does not filter out orders that are not completed, as evidenced by the probe showing 402 incomplete orders. Additionally, the recomputation shows a significant discrepancy in revenue, indicating that the original query includes payments for incomplete orders.",
+  "corrected_sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```
 
-## 14. note · correction
-
-The reviewer's correction and the independent derivation disagree on the corrected value; both are reported.
-
-## 15. gate · verification_gate
+## 11. gate · verification_gate
 
 **BUG** — an independently derived query returns a different number, demonstrating the discrepancy
 

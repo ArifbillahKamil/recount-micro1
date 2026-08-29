@@ -1,6 +1,6 @@
 # Trajectory — baseline — B5_between_loses_last_day
 
-`1` model calls (`1` replayed from cassette) · `0` tool calls · `925` tokens · `$0.00020`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `926` tokens · `$0.00020`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · replayed · 780 in / 145 out · 0.00s
+`gpt-4o-mini` · replayed · 780 in / 146 out · 0.00s
 
 **system**
 
@@ -127,20 +127,20 @@ actually lives at that finer grain.
 ```json
 {
   "verdict": "BUG",
-  "bug_type": "date_range_truncation",
+  "bug_type": "timezone_day_boundary",
   "confidence": 0.9,
-  "explanation": "The query uses a date range that includes only the start and end of January 2026, but it does not account for the entire day of January 31st. The 'BETWEEN' clause should include the end of the day on January 31st to capture all orders placed on that day. The relevant table is 'orders'.",
+  "explanation": "The query does not account for the full day of January 31, 2026, as it uses a range that ends at midnight of that day, which excludes any orders placed on January 31. The 'order_ts' field is in UTC, and the range should include the entire day of January 31. The relevant table is 'orders'.",
   "corrected_sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01' AND order_ts < '2026-02-01'"
 }
 ```
 
 ## 3. gate · final
 
-**BUG** — The query uses a date range that includes only the start and end of January 2026, but it does not account for the entire day of January 31st. The 'BETWEEN' clause should include the end of the day on January 31st to capture all orders placed on that day. The relevant table is 'orders'.
+**BUG** — The query does not account for the full day of January 31, 2026, as it uses a range that ends at midnight of that day, which excludes any orders placed on January 31. The 'order_ts' field is in UTC, and the range should include the entire day of January 31. The relevant table is 'orders'.
 
 ```json
 {
-  "bug_type": "date_range_truncation",
+  "bug_type": "timezone_day_boundary",
   "confidence": 0.9
 }
 ```

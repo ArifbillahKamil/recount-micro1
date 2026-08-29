@@ -1,6 +1,6 @@
 # Trajectory — recount — B8_missing_status_filter
 
-`2` model calls (`1` replayed from cassette) · `7` tool calls · `2382` tokens · `$0.00059`
+`2` model calls (`1` replayed from cassette) · `7` tool calls · `2366` tokens · `$0.00058`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -31,6 +31,10 @@ revenue_cents
   "tables": [
     "orders",
     "payments"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -67,7 +71,7 @@ Independent recomputation disabled for this run.
 
 ## 4. model · plan
 
-`gpt-4o-mini` · replayed · 748 in / 377 out · 0.00s
+`gpt-4o-mini` · replayed · 748 in / 373 out · 0.00s
 
 **system**
 
@@ -160,16 +164,16 @@ out, do not propose a fan-out hypothesis about it.
       "settles": "If distinct_orders is less than total_orders, it confirms the issue; if they are equal, it rules it out."
     },
     {
-      "risk": "The payments table may contain NULL values in the amount_cents column, leading to incorrect revenue calculations.",
-      "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) FROM payments WHERE amount_cents IS NULL",
-      "settles": "If this count is greater than 0, it confirms the issue; if 0, it rules it out."
+      "risk": "The payments table may include refunds that are not accounted for in the revenue calculation.",
+      "bug_type": "other",
+      "probe_sql": "SELECT SUM(p.amount_cents) FROM payments p WHERE p.amount_cents < 0",
+      "settles": "If this sum is greater than 0, it confirms the issue; if 0, it rules it out."
     },
     {
-      "risk": "The query may not account for refunds, which could reduce the total revenue.",
-      "bug_type": "other",
-      "probe_sql": "SELECT SUM(r.amount_cents) FROM refunds r JOIN orders o ON r.order_id = o.order_id",
-      "settles": "If this sum is greater than 0, it confirms the issue; if 0, it rules it out."
+      "risk": "The query may not account for orders that have a NULL status, which could affect the revenue calculation.",
+      "bug_type": "null_swallowing_predicate",
+      "probe_sql": "SELECT COUNT(*) FROM orders WHERE status IS NULL",
+      "settles": "If this count is greater than 0, it confirms the issue; if 0, it rules it out."
     }
   ]
 }
@@ -212,15 +216,15 @@ distinct_orders | total_orders
 **request**
 
 ```sql
-SELECT COUNT(*) FROM payments WHERE amount_cents IS NULL
+SELECT SUM(p.amount_cents) FROM payments p WHERE p.amount_cents < 0
 ```
 
 **response**
 
 ```
-COUNT(*)
---------
-0       
+SUM(p.amount_cents)
+-------------------
+NULL               
 ```
 
 ## 8. tool · `run_sql` · probe_4 · ok
@@ -228,20 +232,20 @@ COUNT(*)
 **request**
 
 ```sql
-SELECT SUM(r.amount_cents) FROM refunds r JOIN orders o ON r.order_id = o.order_id
+SELECT COUNT(*) FROM orders WHERE status IS NULL
 ```
 
 **response**
 
 ```
-SUM(r.amount_cents)
--------------------
-308416250          
+COUNT(*)
+--------
+80      
 ```
 
 ## 9. model · adjudicate
 
-`gpt-4o-mini` · live call · 1119 in / 138 out · 1.66s
+`gpt-4o-mini` · live call · 1112 in / 133 out · 2.22s
 
 **system**
 
@@ -304,19 +308,19 @@ Probes you designed, and what executing them actually returned:
     ----------------+-------------
     1357            | 1683        
 
-[3] risk: The payments table may contain NULL values in the amount_cents column, leading to incorrect revenue calculations.
-    probe: SELECT COUNT(*) FROM payments WHERE amount_cents IS NULL
+[3] risk: The payments table may include refunds that are not accounted for in the revenue calculation.
+    probe: SELECT SUM(p.amount_cents) FROM payments p WHERE p.amount_cents < 0
+    returned:
+    SUM(p.amount_cents)
+    -------------------
+    NULL               
+
+[4] risk: The query may not account for orders that have a NULL status, which could affect the revenue calculation.
+    probe: SELECT COUNT(*) FROM orders WHERE status IS NULL
     returned:
     COUNT(*)
     --------
-    0       
-
-[4] risk: The query may not account for refunds, which could reduce the total revenue.
-    probe: SELECT SUM(r.amount_cents) FROM refunds r JOIN orders o ON r.order_id = o.order_id
-    returned:
-    SUM(r.amount_cents)
-    -------------------
-    308416250          
+    80      
 
 Independent recomputation: not attempted.
 
@@ -359,8 +363,8 @@ actually lives at that finer grain.
 {
   "verdict": "BUG",
   "bug_type": "missing_filter",
-  "confidence": 0.85,
-  "explanation": "The query does not filter for completed orders, which is necessary to accurately calculate revenue from completed orders only. The orders table has 402 rows with a status other than 'completed', which could inflate the revenue figure. Additionally, the join between orders and payments may lead to duplicate revenue due to multiple payments for a single order.",
+  "confidence": 0.9,
+  "explanation": "The query does not filter for completed orders, which is necessary to accurately capture revenue from completed orders only. The orders table has 402 rows with a status other than 'completed', which could inflate the revenue figure. Additionally, there are 80 orders with a NULL status that are not accounted for.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```

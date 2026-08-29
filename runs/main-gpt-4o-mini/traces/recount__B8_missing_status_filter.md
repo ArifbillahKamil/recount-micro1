@@ -1,6 +1,6 @@
 # Trajectory — recount — B8_missing_status_filter
 
-`3` model calls (`0` replayed from cassette) · `7` tool calls · `3058` tokens · `$0.00072`
+`3` model calls (`0` replayed from cassette) · `7` tool calls · `2977` tokens · `$0.00070`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -31,6 +31,10 @@ revenue_cents
   "tables": [
     "orders",
     "payments"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -63,7 +67,7 @@ payments: 1683 rows, one row per payment_id
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · live call · 527 in / 66 out · 1.24s
+`gpt-4o-mini` · live call · 453 in / 71 out · 1.10s
 
 **system**
 
@@ -80,34 +84,30 @@ answer independently.
 Business question:
 What revenue did we capture from completed orders only, in cents?
 
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+MEASURED COLUMN FACTS
 
 orders: 1500 rows, one row per order_id
   order_id: INTEGER, pk, 1500 distinct
   customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
+  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
+  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
   currency: TEXT, 2 distinct
 
 payments: 1683 rows, one row per payment_id
   payment_id: INTEGER, pk, 1683 distinct
   order_id: INTEGER, 1357 distinct
   amount_cents: INTEGER, 941 distinct
-  paid_ts: TEXT, 1672 distinct, range 2026-01-01 03:12:00 .. 2026-05-30 03:21:00
+  paid_ts: TEXT, 1672 distinct, values run '2026-01-01 03:12:00' .. '2026-05-30 03:21:00'
   method: TEXT, 4 distinct
+
+Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 revenue_cents
@@ -120,7 +120,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL", "reasoning": "The query sums the payment amounts for orders that have a non-null status, ensuring we only capture revenue from completed orders."}
+{"sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.status != 'cancelled'", "reasoning": "The query sums the payment amounts for orders that have a non-null status, ensuring only completed orders are included."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -128,7 +128,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL
+SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.status != 'cancelled'
 ```
 
 **response**
@@ -141,7 +141,7 @@ revenue_cents
 
 ## 5. model · plan
 
-`gpt-4o-mini` · live call · 748 in / 377 out · 3.83s
+`gpt-4o-mini` · live call · 748 in / 373 out · 3.92s
 
 **system**
 
@@ -234,16 +234,16 @@ out, do not propose a fan-out hypothesis about it.
       "settles": "If distinct_orders is less than total_orders, it confirms the issue; if they are equal, it rules it out."
     },
     {
-      "risk": "The payments table may contain NULL values in the amount_cents column, leading to incorrect revenue calculations.",
-      "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) FROM payments WHERE amount_cents IS NULL",
-      "settles": "If this count is greater than 0, it confirms the issue; if 0, it rules it out."
+      "risk": "The payments table may include refunds that are not accounted for in the revenue calculation.",
+      "bug_type": "other",
+      "probe_sql": "SELECT SUM(p.amount_cents) FROM payments p WHERE p.amount_cents < 0",
+      "settles": "If this sum is greater than 0, it confirms the issue; if 0, it rules it out."
     },
     {
-      "risk": "The query may not account for refunds, which could reduce the total revenue.",
-      "bug_type": "other",
-      "probe_sql": "SELECT SUM(r.amount_cents) FROM refunds r JOIN orders o ON r.order_id = o.order_id",
-      "settles": "If this sum is greater than 0, it confirms the issue; if 0, it rules it out."
+      "risk": "The query may not account for orders that have a NULL status, which could affect the revenue calculation.",
+      "bug_type": "null_swallowing_predicate",
+      "probe_sql": "SELECT COUNT(*) FROM orders WHERE status IS NULL",
+      "settles": "If this count is greater than 0, it confirms the issue; if 0, it rules it out."
     }
   ]
 }
@@ -286,15 +286,15 @@ distinct_orders | total_orders
 **request**
 
 ```sql
-SELECT COUNT(*) FROM payments WHERE amount_cents IS NULL
+SELECT SUM(p.amount_cents) FROM payments p WHERE p.amount_cents < 0
 ```
 
 **response**
 
 ```
-COUNT(*)
---------
-0       
+SUM(p.amount_cents)
+-------------------
+NULL               
 ```
 
 ## 9. tool · `run_sql` · probe_4 · ok
@@ -302,20 +302,20 @@ COUNT(*)
 **request**
 
 ```sql
-SELECT SUM(r.amount_cents) FROM refunds r JOIN orders o ON r.order_id = o.order_id
+SELECT COUNT(*) FROM orders WHERE status IS NULL
 ```
 
 **response**
 
 ```
-SUM(r.amount_cents)
--------------------
-308416250          
+COUNT(*)
+--------
+80      
 ```
 
 ## 10. model · adjudicate
 
-`gpt-4o-mini` · live call · 1209 in / 131 out · 2.12s
+`gpt-4o-mini` · live call · 1209 in / 123 out · 1.71s
 
 **system**
 
@@ -378,23 +378,23 @@ Probes you designed, and what executing them actually returned:
     ----------------+-------------
     1357            | 1683        
 
-[3] risk: The payments table may contain NULL values in the amount_cents column, leading to incorrect revenue calculations.
-    probe: SELECT COUNT(*) FROM payments WHERE amount_cents IS NULL
+[3] risk: The payments table may include refunds that are not accounted for in the revenue calculation.
+    probe: SELECT SUM(p.amount_cents) FROM payments p WHERE p.amount_cents < 0
+    returned:
+    SUM(p.amount_cents)
+    -------------------
+    NULL               
+
+[4] risk: The query may not account for orders that have a NULL status, which could affect the revenue calculation.
+    probe: SELECT COUNT(*) FROM orders WHERE status IS NULL
     returned:
     COUNT(*)
     --------
-    0       
-
-[4] risk: The query may not account for refunds, which could reduce the total revenue.
-    probe: SELECT SUM(r.amount_cents) FROM refunds r JOIN orders o ON r.order_id = o.order_id
-    returned:
-    SUM(r.amount_cents)
-    -------------------
-    308416250          
+    80      
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL
+  sql: SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.status != 'cancelled'
   returned:
     revenue_cents
     -------------
@@ -445,7 +445,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query does not filter for completed orders, which is necessary to accurately capture revenue from completed orders only. The presence of 402 incomplete orders indicates that the revenue calculation may include amounts from these orders. Additionally, the discrepancy between the query result and the independent recomputation further supports this issue.",
+  "explanation": "The query does not filter out orders that are not completed, as evidenced by the 402 incomplete orders in the orders table. Additionally, the independent recomputation shows a different revenue total, indicating that the original query does not accurately reflect completed orders only.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```

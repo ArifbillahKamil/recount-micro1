@@ -1,6 +1,6 @@
 # Trajectory — recount — B2_fanout_units_via_payments
 
-`2` model calls (`1` replayed from cassette) · `2` tool calls · `1813` tokens · `$0.00036`
+`2` model calls (`1` replayed from cassette) · `2` tool calls · `1814` tokens · `$0.00036`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -30,7 +30,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 582 in / 70 out · 0.00s
+`gpt-4o-mini` · replayed · 586 in / 75 out · 0.00s
 
 **system**
 
@@ -113,8 +113,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 units_sold
@@ -127,7 +127,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of order items for orders that have a status of 'completed', ensuring we only count sold units from finalized orders."}
+{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of items sold from the order_items table, filtering for orders that have a status of 'completed' to ensure only completed orders are counted."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -152,7 +152,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1032 in / 129 out · 1.71s
+`gpt-4o-mini` · live call · 1032 in / 121 out · 1.24s
 
 **system**
 
@@ -296,9 +296,9 @@ actually lives at that finer grain.
 ```json
 {
   "verdict": "BUG",
-  "bug_type": "wrong_aggregation_grain",
+  "bug_type": "mixed_unit_aggregation",
   "confidence": 0.9,
-  "explanation": "The query under review joins the 'payments' table, which is not necessary for calculating the total units sold from completed orders. The independent recomputation, which only joins 'order_items' and 'orders', returned a different total, indicating a discrepancy in the aggregation.",
+  "explanation": "The query under review joins the payments table, which is not necessary for calculating the total units sold from completed orders. The independent recomputation, which excludes the payments table, returned a different total, indicating a discrepancy in the aggregation.",
   "corrected_sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```

@@ -1,6 +1,6 @@
 # Trajectory — recount — C4_clean_half_open_date_range
 
-`2` model calls (`1` replayed from cassette) · `2` tool calls · `1833` tokens · `$0.00038`
+`2` model calls (`1` replayed from cassette) · `2` tool calls · `1841` tokens · `$0.00038`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -28,7 +28,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 581 in / 81 out · 0.00s
+`gpt-4o-mini` · replayed · 585 in / 83 out · 0.00s
 
 **system**
 
@@ -111,8 +111,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 january_orders
@@ -125,7 +125,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'", "reasoning": "The query counts the total number of orders placed in January 2026 by filtering the order timestamps within the specified date range."}
+{"sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'", "reasoning": "The query counts the total number of orders placed in January 2026 by filtering the order timestamps within the specified date range in UTC."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -150,7 +150,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1027 in / 144 out · 2.50s
+`gpt-4o-mini` · live call · 1027 in / 146 out · 2.03s
 
 **system**
 
@@ -292,9 +292,9 @@ actually lives at that finer grain.
 ```json
 {
   "verdict": "BUG",
-  "bug_type": "date_range_truncation",
+  "bug_type": "timezone_day_boundary",
   "confidence": 0.9,
-  "explanation": "The query under review uses a date range that does not include the full UTC timestamps for January 2026, which may lead to missing orders. The independent recomputation returned a different count, indicating that the original query likely truncated some orders due to the date range specified.",
+  "explanation": "The query under review uses a date range that does not account for the UTC timezone properly, which may lead to missing orders that fall on the boundary of the specified dates. The independent recomputation returned a different count, indicating that the original query may have excluded some orders due to this issue.",
   "corrected_sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'"
 }
 ```

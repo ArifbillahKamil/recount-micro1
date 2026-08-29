@@ -1,6 +1,6 @@
 # Trajectory — recount — B2_fanout_units_via_payments
 
-`3` model calls (`0` replayed from cassette) · `6` tool calls · `3467` tokens · `$0.00083`
+`3` model calls (`0` replayed from cassette) · `6` tool calls · `3452` tokens · `$0.00083`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -30,7 +30,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · live call · 582 in / 70 out · 1.42s
+`gpt-4o-mini` · live call · 586 in / 75 out · 1.39s
 
 **system**
 
@@ -113,8 +113,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 units_sold
@@ -127,7 +127,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of order items for orders that have a status of 'completed', ensuring we only count sold units from finalized orders."}
+{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of items sold from the order_items table, filtering for orders that have a status of 'completed' to ensure only completed orders are counted."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -148,7 +148,7 @@ units_sold
 
 ## 5. model · plan
 
-`gpt-4o-mini` · live call · 825 in / 482 out · 3.60s
+`gpt-4o-mini` · live call · 825 in / 462 out · 4.88s
 
 **system**
 
@@ -286,13 +286,13 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "The query may be counting units sold from orders that have been refunded.",
       "bug_type": "other",
       "probe_sql": "SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.order_id IS NULL",
-      "settles": "If this sum is less than 3648, it would confirm that refunds are affecting the count, while if it matches or exceeds 3648, it would rule it out."
+      "settles": "If this sum is less than 3648, it would confirm the issue, while being equal would rule it out."
     },
     {
-      "risk": "The query may be aggregating quantities from multiple order items per order, leading to inflated counts if orders are duplicated in the join.",
-      "bug_type": "fanout_join",
+      "risk": "The query may be aggregating quantities from multiple order items per order, leading to inflated totals.",
+      "bug_type": "wrong_aggregation_grain",
       "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, SUM(oi.quantity) AS total_units FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If the distinct_orders count is significantly lower than the total_units divided by the average number of items per order, it would confirm this issue, while a close match would rule it out."
+      "settles": "If the distinct_orders count is less than the total_units divided by the average quantity per order, it would confirm the issue, while a consistent ratio would rule it out."
     }
   ]
 }
@@ -364,7 +364,7 @@ distinct_orders | total_units
 
 ## 10. model · adjudicate
 
-`gpt-4o-mini` · live call · 1362 in / 146 out · 2.19s
+`gpt-4o-mini` · live call · 1355 in / 149 out · 1.97s
 
 **system**
 
@@ -476,7 +476,7 @@ Probes you designed, and what executing them actually returned:
     ----------------
     2945            
 
-[4] risk: The query may be aggregating quantities from multiple order items per order, leading to inflated counts if orders are duplicated in the join.
+[4] risk: The query may be aggregating quantities from multiple order items per order, leading to inflated totals.
     probe: SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, SUM(oi.quantity) AS total_units FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
     returned:
     distinct_orders | total_units
@@ -536,7 +536,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "mixed_unit_aggregation",
   "confidence": 0.9,
-  "explanation": "The query under review aggregates quantities from order_items while also joining with payments, which may lead to inflated counts due to multiple order items per order. The independent recomputation returned a different total, indicating that the original query does not accurately reflect the number of units sold on completed orders. The discrepancy suggests that the aggregation is not correctly aligned with the business question.",
+  "explanation": "The query aggregates quantities from order_items, but the independent recomputation shows a different total, indicating that the join with payments may be inflating the count. The discrepancy suggests that the query is not accurately reflecting the total units sold from completed orders. The correct total from the independent recomputation is 2993, which indicates a potential issue with how the joins are structured.",
   "corrected_sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```

@@ -1,6 +1,6 @@
 # Trajectory — recount — C2_clean_units_sold_at_line_grain
 
-`2` model calls (`1` replayed from cassette) · `6` tool calls · `2572` tokens · `$0.00064`
+`2` model calls (`1` replayed from cassette) · `6` tool calls · `2587` tokens · `$0.00065`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -32,6 +32,10 @@ units_sold
   "tables": [
     "order_items",
     "orders"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -69,7 +73,7 @@ Independent recomputation disabled for this run.
 
 ## 4. model · plan
 
-`gpt-4o-mini` · replayed · 759 in / 489 out · 0.00s
+`gpt-4o-mini` · replayed · 759 in / 492 out · 0.00s
 
 **system**
 
@@ -158,22 +162,22 @@ out, do not propose a fan-out hypothesis about it.
       "settles": "If distinct_orders is significantly less than total_order_items, it confirms a fanout issue. If they are close, it rules it out."
     },
     {
-      "risk": "Some completed orders may have NULL values in the quantity column of order_items, leading to an undercount.",
+      "risk": "Some completed orders may have NULL values in the order_items table, leading to an undercount of units sold.",
       "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS null_quantity_count FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND oi.quantity IS NULL",
-      "settles": "If null_quantity_count is greater than 0, it confirms the issue. If it is 0, it rules it out."
+      "probe_sql": "SELECT COUNT(*) AS total_completed_orders, COUNT(oi.order_id) AS total_order_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'",
+      "settles": "If total_completed_orders is greater than total_order_items, it confirms that some completed orders have no associated order_items. If they are equal, it rules it out."
     },
     {
-      "risk": "The query may be missing orders that are completed but have no associated order_items.",
+      "risk": "The query may be missing orders that were completed but have been excluded due to a status filter.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) AS completed_orders_without_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' AND oi.order_id IS NULL",
-      "settles": "If completed_orders_without_items is greater than 0, it confirms the issue. If it is 0, it rules it out."
+      "probe_sql": "SELECT COUNT(*) AS total_orders FROM orders WHERE status = 'completed'",
+      "settles": "If total_orders matches the expected number of completed orders, it rules out missing orders. If it is higher than expected, it confirms the issue."
     },
     {
-      "risk": "The aggregation may be incorrect due to mixed unit aggregation if quantities are not consistently defined.",
-      "bug_type": "mixed_unit_aggregation",
-      "probe_sql": "SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT oi.order_id) AS distinct_orders FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If total_units_sold is significantly different when compared to the number of distinct_orders, it confirms the issue. If they align, it rules it out."
+      "risk": "The aggregation of quantities may be incorrect due to the presence of multiple order_items for the same order.",
+      "bug_type": "wrong_aggregation_grain",
+      "probe_sql": "SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT o.order_id) AS distinct_orders FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'",
+      "settles": "If total_units_sold divided by distinct_orders is greater than the average quantity per order, it confirms a wrong aggregation grain. If it is consistent, it rules it out."
     }
   ]
 }
@@ -200,15 +204,15 @@ distinct_orders | total_order_items
 **request**
 
 ```sql
-SELECT COUNT(*) AS null_quantity_count FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND oi.quantity IS NULL
+SELECT COUNT(*) AS total_completed_orders, COUNT(oi.order_id) AS total_order_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
 ```
 
 **response**
 
 ```
-null_quantity_count
--------------------
-0                  
+total_completed_orders | total_order_items
+-----------------------+------------------
+2169                   | 2169             
 ```
 
 ## 7. tool · `run_sql` · probe_3 · ok
@@ -216,15 +220,15 @@ null_quantity_count
 **request**
 
 ```sql
-SELECT COUNT(*) AS completed_orders_without_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' AND oi.order_id IS NULL
+SELECT COUNT(*) AS total_orders FROM orders WHERE status = 'completed'
 ```
 
 **response**
 
 ```
-completed_orders_without_items
-------------------------------
-0                             
+total_orders
+------------
+1018        
 ```
 
 ## 8. tool · `run_sql` · probe_4 · ok
@@ -232,7 +236,7 @@ completed_orders_without_items
 **request**
 
 ```sql
-SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT oi.order_id) AS distinct_orders FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'
+SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT o.order_id) AS distinct_orders FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
 ```
 
 **response**
@@ -245,7 +249,7 @@ total_units_sold | distinct_orders
 
 ## 9. model · adjudicate
 
-`gpt-4o-mini` · live call · 1237 in / 87 out · 1.34s
+`gpt-4o-mini` · live call · 1237 in / 99 out · 1.73s
 
 **system**
 
@@ -303,22 +307,22 @@ Probes you designed, and what executing them actually returned:
     ----------------+------------------
     1018            | 2169             
 
-[2] risk: Some completed orders may have NULL values in the quantity column of order_items, leading to an undercount.
-    probe: SELECT COUNT(*) AS null_quantity_count FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND oi.quantity IS NULL
+[2] risk: Some completed orders may have NULL values in the order_items table, leading to an undercount of units sold.
+    probe: SELECT COUNT(*) AS total_completed_orders, COUNT(oi.order_id) AS total_order_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
     returned:
-    null_quantity_count
-    -------------------
-    0                  
+    total_completed_orders | total_order_items
+    -----------------------+------------------
+    2169                   | 2169             
 
-[3] risk: The query may be missing orders that are completed but have no associated order_items.
-    probe: SELECT COUNT(*) AS completed_orders_without_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' AND oi.order_id IS NULL
+[3] risk: The query may be missing orders that were completed but have been excluded due to a status filter.
+    probe: SELECT COUNT(*) AS total_orders FROM orders WHERE status = 'completed'
     returned:
-    completed_orders_without_items
-    ------------------------------
-    0                             
+    total_orders
+    ------------
+    1018        
 
-[4] risk: The aggregation may be incorrect due to mixed unit aggregation if quantities are not consistently defined.
-    probe: SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT oi.order_id) AS distinct_orders FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'
+[4] risk: The aggregation of quantities may be incorrect due to the presence of multiple order_items for the same order.
+    probe: SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT o.order_id) AS distinct_orders FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
     returned:
     total_units_sold | distinct_orders
     -----------------+----------------
@@ -365,8 +369,8 @@ actually lives at that finer grain.
 {
   "verdict": "CLEAN",
   "bug_type": null,
-  "confidence": 0.95,
-  "explanation": "The query correctly aggregates the total quantity of units sold from the order_items table for completed orders in the orders table. The probes confirm that there are no NULL quantities and no completed orders without items, supporting the accuracy of the result.",
+  "confidence": 0.9,
+  "explanation": "The query correctly aggregates the total quantity of units sold from the order_items table for completed orders in the orders table. The results from the probes confirm that the join does not lead to an incorrect count of units sold, as the total units sold matches the expected aggregation for the distinct completed orders.",
   "corrected_sql": null
 }
 ```

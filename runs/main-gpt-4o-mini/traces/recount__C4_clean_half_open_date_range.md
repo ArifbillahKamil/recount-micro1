@@ -1,6 +1,6 @@
 # Trajectory — recount — C4_clean_half_open_date_range
 
-`3` model calls (`0` replayed from cassette) · `7` tool calls · `2766` tokens · `$0.00067`
+`3` model calls (`0` replayed from cassette) · `7` tool calls · `2848` tokens · `$0.00072`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -30,6 +30,10 @@ january_orders
 {
   "tables": [
     "orders"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -55,7 +59,7 @@ orders: 1500 rows, one row per order_id
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · live call · 430 in / 78 out · 1.91s
+`gpt-4o-mini` · live call · 354 in / 84 out · 1.30s
 
 **system**
 
@@ -72,27 +76,23 @@ answer independently.
 Business question:
 How many orders were placed during January 2026, in UTC?
 
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+MEASURED COLUMN FACTS
 
 orders: 1500 rows, one row per order_id
   order_id: INTEGER, pk, 1500 distinct
   customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
+  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
+  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
   currency: TEXT, 2 distinct
+
+Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 january_orders
@@ -105,7 +105,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'", "reasoning": "I filtered the orders table for timestamps in January 2026 to count the total number of orders placed during that month."}
+{"sql": "SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL", "reasoning": "I counted the order_id for orders placed in January 2026, ensuring to filter out any NULL statuses."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -113,7 +113,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'
+SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
 ```
 
 **response**
@@ -121,12 +121,12 @@ SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:0
 ```
 january_orders
 --------------
-551           
+520           
 ```
 
 ## 5. model · plan
 
-`gpt-4o-mini` · live call · 655 in / 384 out · 5.61s
+`gpt-4o-mini` · live call · 655 in / 428 out · 5.67s
 
 **system**
 
@@ -200,28 +200,28 @@ out, do not propose a fan-out hypothesis about it.
 {
   "hypotheses": [
     {
-      "risk": "The order_ts column may contain NULL values that are not accounted for in the count",
+      "risk": "The order_ts column may contain NULL values that are not counted in the total",
       "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS null_order_ts_count FROM orders WHERE order_ts IS NULL",
-      "settles": "If the result is greater than 0, it confirms the issue; if 0, it rules it out."
+      "probe_sql": "SELECT COUNT(*) AS total_orders, COUNT(order_ts) AS counted_orders FROM orders",
+      "settles": "If total_orders is greater than counted_orders, it confirms the issue; if they are equal, it rules it out."
     },
     {
-      "risk": "The order_ts column may have timestamps that fall outside the expected UTC range due to timezone issues",
+      "risk": "The order_ts values may not be in UTC, leading to incorrect date filtering",
       "bug_type": "timezone_day_boundary",
-      "probe_sql": "SELECT COUNT(*) AS out_of_range_orders FROM orders WHERE order_ts < '2026-01-01' OR order_ts >= '2026-02-01'",
-      "settles": "If the result is greater than 0, it confirms the issue; if 0, it rules it out."
+      "probe_sql": "SELECT COUNT(*) AS january_orders_utc FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'",
+      "settles": "If january_orders_utc is different from 551, it confirms the issue; if it matches, it rules it out."
     },
     {
-      "risk": "The query may be counting orders with a status that does not represent completed orders",
+      "risk": "The date range may not include all orders due to incorrect timestamp format or truncation",
+      "bug_type": "date_range_truncation",
+      "probe_sql": "SELECT MIN(order_ts) AS min_order_ts, MAX(order_ts) AS max_order_ts FROM orders",
+      "settles": "If the min_order_ts is after '2026-01-01' or the max_order_ts is before '2026-02-01', it confirms the issue; if both are within range, it rules it out."
+    },
+    {
+      "risk": "The query may not account for orders with a status that excludes them from the count",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) AS incomplete_orders FROM orders WHERE status IS NULL OR status != 'completed'",
-      "settles": "If the result is greater than 0, it confirms the issue; if 0, it rules it out."
-    },
-    {
-      "risk": "The order count may be affected by fan-out from related tables, leading to double counting",
-      "bug_type": "fanout_join",
-      "probe_sql": "SELECT COUNT(DISTINCT order_id) AS distinct_order_count FROM order_items",
-      "settles": "If this count is less than 551, it confirms the issue; if equal or greater, it rules it out."
+      "probe_sql": "SELECT COUNT(*) AS total_orders_with_status FROM orders WHERE status IS NOT NULL",
+      "settles": "If total_orders_with_status is less than 1500, it confirms the issue; if it matches, it rules it out."
     }
   ]
 }
@@ -232,15 +232,15 @@ out, do not propose a fan-out hypothesis about it.
 **request**
 
 ```sql
-SELECT COUNT(*) AS null_order_ts_count FROM orders WHERE order_ts IS NULL
+SELECT COUNT(*) AS total_orders, COUNT(order_ts) AS counted_orders FROM orders
 ```
 
 **response**
 
 ```
-null_order_ts_count
--------------------
-0                  
+total_orders | counted_orders
+-------------+---------------
+1500         | 1500          
 ```
 
 ## 7. tool · `run_sql` · probe_2 · ok
@@ -248,15 +248,15 @@ null_order_ts_count
 **request**
 
 ```sql
-SELECT COUNT(*) AS out_of_range_orders FROM orders WHERE order_ts < '2026-01-01' OR order_ts >= '2026-02-01'
+SELECT COUNT(*) AS january_orders_utc FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'
 ```
 
 **response**
 
 ```
-out_of_range_orders
--------------------
-949                
+january_orders_utc
+------------------
+557               
 ```
 
 ## 8. tool · `run_sql` · probe_3 · ok
@@ -264,15 +264,15 @@ out_of_range_orders
 **request**
 
 ```sql
-SELECT COUNT(*) AS incomplete_orders FROM orders WHERE status IS NULL OR status != 'completed'
+SELECT MIN(order_ts) AS min_order_ts, MAX(order_ts) AS max_order_ts FROM orders
 ```
 
 **response**
 
 ```
-incomplete_orders
------------------
-482              
+min_order_ts        | max_order_ts       
+--------------------+--------------------
+2026-01-01 02:11:00 | 2026-03-31 21:27:00
 ```
 
 ## 9. tool · `run_sql` · probe_4 · ok
@@ -280,20 +280,20 @@ incomplete_orders
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT order_id) AS distinct_order_count FROM order_items
+SELECT COUNT(*) AS total_orders_with_status FROM orders WHERE status IS NOT NULL
 ```
 
 **response**
 
 ```
-distinct_order_count
---------------------
-1500                
+total_orders_with_status
+------------------------
+1420                    
 ```
 
 ## 10. model · adjudicate
 
-`gpt-4o-mini` · live call · 1119 in / 100 out · 1.96s
+`gpt-4o-mini` · live call · 1186 in / 141 out · 2.30s
 
 **system**
 
@@ -335,41 +335,41 @@ orders: 1500 rows, one row per order_id
   currency: TEXT, 2 distinct
 
 Probes you designed, and what executing them actually returned:
-[1] risk: The order_ts column may contain NULL values that are not accounted for in the count
-    probe: SELECT COUNT(*) AS null_order_ts_count FROM orders WHERE order_ts IS NULL
+[1] risk: The order_ts column may contain NULL values that are not counted in the total
+    probe: SELECT COUNT(*) AS total_orders, COUNT(order_ts) AS counted_orders FROM orders
     returned:
-    null_order_ts_count
-    -------------------
-    0                  
+    total_orders | counted_orders
+    -------------+---------------
+    1500         | 1500          
 
-[2] risk: The order_ts column may have timestamps that fall outside the expected UTC range due to timezone issues
-    probe: SELECT COUNT(*) AS out_of_range_orders FROM orders WHERE order_ts < '2026-01-01' OR order_ts >= '2026-02-01'
+[2] risk: The order_ts values may not be in UTC, leading to incorrect date filtering
+    probe: SELECT COUNT(*) AS january_orders_utc FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'
     returned:
-    out_of_range_orders
-    -------------------
-    949                
+    january_orders_utc
+    ------------------
+    557               
 
-[3] risk: The query may be counting orders with a status that does not represent completed orders
-    probe: SELECT COUNT(*) AS incomplete_orders FROM orders WHERE status IS NULL OR status != 'completed'
+[3] risk: The date range may not include all orders due to incorrect timestamp format or truncation
+    probe: SELECT MIN(order_ts) AS min_order_ts, MAX(order_ts) AS max_order_ts FROM orders
     returned:
-    incomplete_orders
-    -----------------
-    482              
+    min_order_ts        | max_order_ts       
+    --------------------+--------------------
+    2026-01-01 02:11:00 | 2026-03-31 21:27:00
 
-[4] risk: The order count may be affected by fan-out from related tables, leading to double counting
-    probe: SELECT COUNT(DISTINCT order_id) AS distinct_order_count FROM order_items
+[4] risk: The query may not account for orders with a status that excludes them from the count
+    probe: SELECT COUNT(*) AS total_orders_with_status FROM orders WHERE status IS NOT NULL
     returned:
-    distinct_order_count
-    --------------------
-    1500                
+    total_orders_with_status
+    ------------------------
+    1420                    
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'
+  sql: SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
   returned:
     january_orders
     --------------
-    551           
+    520           
 
   the query under review returned:
     january_orders
@@ -413,20 +413,21 @@ actually lives at that finer grain.
 
 ```json
 {
-  "verdict": "CLEAN",
-  "bug_type": null,
-  "confidence": 1,
-  "explanation": "The query correctly counts the number of orders placed in January 2026 based on the order_ts column in the orders table. The independent recomputation confirmed the result of 551 orders, indicating consistency. Additionally, there are no NULL values in order_ts, and the count does not include any incomplete orders.",
-  "corrected_sql": null
+  "verdict": "BUG",
+  "bug_type": "missing_filter",
+  "confidence": 0.9,
+  "explanation": "The query under review does not filter out orders with a NULL status, which affects the count. The independent recomputation correctly includes this filter and returns a different count. The discrepancy indicates that the original query does not accurately reflect the business question.",
+  "corrected_sql": "SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL"
 }
 ```
 
 ## 11. gate · verification_gate
 
-**CLEAN** — an independently derived query returns the same number, corroborating the reported result
+**BUG** — an independently derived query returns a different number, demonstrating the discrepancy
 
 ```json
 {
-  "both_returned": "january_orders\n--------------\n551           "
+  "reported": "january_orders\n--------------\n551           ",
+  "recomputed": "january_orders\n--------------\n520           "
 }
 ```
