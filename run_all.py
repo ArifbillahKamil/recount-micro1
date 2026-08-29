@@ -132,34 +132,40 @@ def main() -> int:
         print("Or use --dry-run to verify the project without a key.", file=sys.stderr)
         return 2
 
+    # The reported configuration. Arrived at by measurement, not design: the
+    # warehouse profiler and the probe loop were each measured to cost accuracy
+    # or money while contributing nothing, and were removed. What remains is the
+    # independent recomputation, the gate, and stored value formats.
+    REPORTED = ["--no-profile", "--no-probes"]
+
     main_label = f"main-{model}"
-    ablations = [
-        ("no-profile", ["--no-profile"], "schema only, no measured data facts"),
-        ("no-probes", ["--no-probes"], "no executed probes"),
-        ("no-recompute", ["--no-recompute"], "no independent recomputation"),
-        ("no-gate", ["--no-gate"], "model verdict accepted as-is"),
-        # Single knockouts on gpt-4o-mini showed the profiler and the probe loop
-        # each costing accuracy or money while contributing nothing, so the
-        # combination is measured as a candidate final configuration rather than
-        # assumed to be better.
-        ("lean", ["--no-profile", "--no-probes"], "recomputation and gate only"),
+    variants = [
+        # Removing a stage that is in the reported configuration.
+        ("no-recompute", REPORTED + ["--no-recompute"],
+         "drop the independent recomputation"),
+        ("no-gate", REPORTED + ["--no-gate"], "accept the model verdict as-is"),
+        ("no-formats", REPORTED + ["--no-formats"],
+         "withhold stored value formats from the author"),
+        # Putting back a stage that was removed, to show why it was.
+        ("add-profile", ["--no-probes"], "restore the warehouse profiler"),
+        ("add-probes", ["--no-profile"], "restore the probe loop"),
     ]
 
     banner(4, total, f"Headline run: baseline vs Recount on {model}")
     run([PY, "-m", "recount.evaluate", "--system", "both", "--model", model,
-         "--record", "--label", main_label] + price)
+         "--record", "--label", main_label] + REPORTED + price)
 
-    for index, (name, flags, description) in enumerate(ablations, start=5):
-        banner(index, total, f"Ablation: {name} ({description})")
+    for index, (name, flags, description) in enumerate(variants, start=5):
+        banner(index, total, f"Variant: {name} ({description})")
         run([PY, "-m", "recount.evaluate", "--system", "recount", "--model", model,
              "--label", f"ablation-{name}-{model}"] + flags + price)
 
     banner(10, total, "Confirm a reviewer with no API key gets the same numbers")
     run([PY, "-m", "recount.evaluate", "--system", "both", "--model", model,
-         "--offline", "--label", f"verify-offline-{model}"] + price)
+         "--offline", "--label", f"verify-offline-{model}"] + REPORTED + price)
 
     paths = [f"runs/{main_label}/results.json"] + [
-        f"runs/ablation-{name}-{model}/results.json" for name, _, _ in ablations
+        f"runs/ablation-{name}-{model}/results.json" for name, _, _ in variants
     ]
     table = run([PY, "-m", "recount.evaluate", "--compare"] + paths)
     (HERE / "runs" / "changelog-table.md").write_text(table, encoding="utf-8")

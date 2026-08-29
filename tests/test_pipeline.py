@@ -627,6 +627,77 @@ def test_profile_is_split_by_role() -> None:
     )
 
 
+def test_format_hints_carry_no_hazard_language() -> None:
+    """The author gets how values look, and no warnings.
+
+    Traced from two real failures. Without any measured context the author wrote
+    `'2026-01-01T00:00:00Z'` against values stored `'2026-01-01 02:11:00'`, so
+    formats are needed. With a fuller profile it wrote `WHERE status IS NOT NULL`
+    in place of `WHERE status = 'completed'` -- the NULL warning displaced the
+    required filter rather than adding to it. A hazard named to an author becomes
+    the thing it optimises for, and it competes with the question.
+    """
+    from recount.profiler import profile as build
+
+    hints = build(DB).format_hints(tables=["orders"])
+    check(
+        "the stored timestamp format is shown",
+        repr("2026-01-01 02:11:00") in hints,
+        hints[:200],
+    )
+    for phrase in ("FANS OUT", "must handle", "NULL in", "WARNING", "careful"):
+        check(
+            f"no hazard language: {phrase!r} absent",
+            phrase.lower() not in hints.lower(),
+            hints[:300],
+        )
+
+    case = cases.by_id("C4_clean_half_open_date_range")
+    _, _, client = run(
+        case.case_id,
+        {
+            "adjudicate": [
+                {"verdict": "CLEAN", "confidence": 0.9,
+                 "explanation": "Correct.", "corrected_sql": None}
+            ]
+        },
+        enable_probes=False,
+        enable_profile=False,
+    )
+    prompt = client.prompt_for("recompute") or ""
+    check(
+        "formats reach the author even with profiling off",
+        repr("2026-01-01 02:11:00") in prompt,
+        prompt[-300:],
+    )
+    check(
+        "and no fan-out warning rides along",
+        "FANS OUT" not in prompt,
+        prompt[:200],
+    )
+
+    _, trace, client2 = run(
+        case.case_id,
+        {
+            "adjudicate": [
+                {"verdict": "CLEAN", "confidence": 0.9,
+                 "explanation": "Correct.", "corrected_sql": None}
+            ]
+        },
+        enable_probes=False,
+        enable_profile=False,
+        enable_formats=False,
+    )
+    check(
+        "--no-formats genuinely withholds them",
+        repr("2026-01-01 02:11:00") not in (client2.prompt_for("recompute") or ""),
+    )
+    check(
+        "and says so in the trace",
+        any(e.step == "formats_disabled" for e in trace.events),
+    )
+
+
 def test_profile_ablation_falls_back_to_schema_only() -> None:
     case = cases.by_id("B1_fanout_payments_via_line_items")
     script = {
@@ -1006,6 +1077,7 @@ TESTS = [
     test_malformed_verdict_fails_safe,
     test_prose_wrapped_json_is_recovered,
     test_gate_ablation_lets_false_positive_through,
+    test_format_hints_carry_no_hazard_language,
     test_profile_is_split_by_role,
     test_profile_ablation_falls_back_to_schema_only,
     test_probe_ablation_skips_planning,

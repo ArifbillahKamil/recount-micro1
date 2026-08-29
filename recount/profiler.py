@@ -219,6 +219,55 @@ class Profile:
             lines.append("")
         return "\n".join(lines).rstrip()
 
+    def format_hints(self, tables: Optional[list] = None) -> str:
+        """How values are stored, and nothing else.
+
+        This is the smallest context that fixed a real failure, and it is
+        deliberately free of hazard language.
+
+        Given no profile at all, the author wrote a correct query for every case
+        but one: a January filter against `order_ts` using
+        `'2026-01-01T00:00:00Z'` where values are stored `'2026-01-01 02:11:00'`.
+        Because 'T' sorts after a space that dropped a day and admitted another.
+        Value formats fix it.
+
+        Given a fuller profile, the author got *worse*, and the traces show why.
+        Told "a predicate on status must handle NULL explicitly", it wrote
+        `WHERE status IS NOT NULL` in place of `WHERE status = 'completed'` --
+        the warning did not merely add a redundant filter, it displaced the
+        required one. Told that a table fans out, it added DISTINCT and
+        subqueries the question never called for.
+
+        A hazard mentioned to an author becomes a thing to satisfy, and it
+        competes with the question. So nothing here is phrased as a hazard: only
+        how values look, plus one instruction about matching them.
+        """
+        wanted = set(tables) if tables else None
+        lines = []
+        for table in self.tables:
+            if wanted and table.name not in wanted:
+                continue
+            for column in table.columns:
+                if column.min_value is None:
+                    continue
+                lines.append(
+                    f"  {table.name}.{column.name} ({column.declared_type or '?'}): "
+                    f"values are stored like {column.min_value!r} "
+                    f"through {column.max_value!r}"
+                )
+        if not lines:
+            return ""
+        return "\n".join(
+            ["STORED VALUE FORMATS", ""]
+            + lines
+            + [
+                "",
+                "Write literals in exactly this format. A differently formatted "
+                "string compares as text rather than as a time, and silently "
+                "selects the wrong rows.",
+            ]
+        )
+
     def _author_prompt(self, wanted: Optional[set]) -> str:
         """Facts needed to write a correct query, without the alarming ones."""
         lines = ["MEASURED COLUMN FACTS", ""]

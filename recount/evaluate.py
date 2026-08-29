@@ -54,6 +54,7 @@ class RunConfig:
     enable_probes: bool = True
     enable_profile: bool = True
     enable_recompute: bool = True
+    enable_formats: bool = True
     max_probes: int = agent.MAX_PROBES
     price_in: Optional[float] = None
     price_out: Optional[float] = None
@@ -67,6 +68,7 @@ class RunConfig:
             "probes_enabled": self.enable_probes,
             "profile_enabled": self.enable_profile,
             "recompute_enabled": self.enable_recompute,
+            "value_formats_enabled": self.enable_formats,
             "max_probes": self.max_probes,
             "db": self.db,
         }
@@ -135,6 +137,7 @@ def run_system(
                 enable_probes=config.enable_probes,
                 enable_profile=config.enable_profile,
                 enable_recompute=config.enable_recompute,
+                enable_formats=config.enable_formats,
             )
 
         elapsed = time.time() - started
@@ -224,6 +227,7 @@ def write_results(
         "",
         f"Model `{config.model}` · mode `{config.mode}` · "
         f"profile {'on' if config.enable_profile else 'OFF'} · "
+        f"formats {'on' if config.enable_formats else 'OFF'} · "
         f"probes {'on' if config.enable_probes else 'OFF'} · "
         f"gate {'on' if config.enable_gate else 'OFF'}",
         "",
@@ -321,6 +325,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="ablation: skip the independent recomputation",
     )
+    p.add_argument(
+        "--no-formats",
+        action="store_true",
+        help="ablation: withhold stored value formats from the author",
+    )
     p.add_argument("--max-probes", type=int, default=agent.MAX_PROBES)
     p.add_argument("--price-in", type=float, default=None, help="USD per 1M input tokens")
     p.add_argument("--price-out", type=float, default=None, help="USD per 1M output tokens")
@@ -395,6 +404,7 @@ def main(argv: Optional[list] = None) -> int:
         enable_probes=not args.no_probes,
         enable_profile=not args.no_profile,
         enable_recompute=not args.no_recompute,
+        enable_formats=not args.no_formats,
         max_probes=args.max_probes,
         price_in=args.price_in,
         price_out=args.price_out,
@@ -446,6 +456,8 @@ def _default_label(args, mode: str) -> str:
         bits.append("no-profile")
     if args.no_recompute:
         bits.append("no-recompute")
+    if args.no_formats:
+        bits.append("no-formats")
     if mode == MODE_REPLAY:
         bits.append("replay")
     return "-".join(bits)

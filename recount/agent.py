@@ -795,6 +795,7 @@ def review(
     enable_probes: bool = True,
     enable_profile: bool = True,
     enable_recompute: bool = True,
+    enable_formats: bool = True,
 ) -> tuple:
     """Verify one query. Returns ``(Verdict, Trace)``.
 
@@ -820,9 +821,6 @@ def review(
     profile = cached_profile or build_profile(db_path)
     tables = _referenced_tables(sql, profile)
     if enable_profile:
-        # Two views of the same measurements. The reviewer needs join
-        # cardinality; the author needs types, real NULLs and stored formats, and
-        # is measurably harmed by fan-out warnings. See Profile.to_prompt.
         profile_text = profile.to_prompt(tables=tables, role=REVIEWER)
         author_profile_text = profile.to_prompt(tables=tables, role=AUTHOR)
         trace.add_tool(
@@ -832,13 +830,26 @@ def review(
             profile_text,
         )
     else:
-        # Ablation: same pipeline, but the agent sees only the DDL and must
-        # speculate about grain, NULLs and cardinality instead of knowing them.
-        profile_text = "SCHEMA (no data profiling available)\n\n" + schema_ddl(db_path)
+        profile_text = "SCHEMA\n\n" + schema_ddl(db_path)
         author_profile_text = profile_text
         trace.add_note(
             "profile_disabled",
-            "Profiling disabled for this run; the agent sees the schema only.",
+            "Warehouse profiling disabled; both roles see the schema only.",
+        )
+
+    # Stored value formats go to the author regardless, because they are the one
+    # piece of measured context that helped without inviting defensiveness.
+    if enable_formats:
+        hints = profile.format_hints(tables=tables)
+        if hints:
+            author_profile_text = author_profile_text + "\n\n" + hints
+            trace.add_tool(
+                "value_formats", "profiler.format_hints", {"tables": tables}, hints
+            )
+    else:
+        trace.add_note(
+            "formats_disabled",
+            "Stored value formats withheld from the author for this run.",
         )
 
     hypotheses: list = []
