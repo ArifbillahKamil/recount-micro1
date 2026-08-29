@@ -31,7 +31,7 @@ HERE = Path(__file__).resolve().parent
 PY = sys.executable or "python3"
 
 
-def banner(step: str, total: int, title: str) -> None:
+def banner(step, total: int, title: str) -> None:
     print(f"\n{'=' * 70}\n  {step}/{total}  {title}\n{'=' * 70}", flush=True)
 
 
@@ -170,13 +170,22 @@ def main() -> int:
     table = run([PY, "-m", "recount.evaluate", "--compare"] + paths)
     (HERE / "runs" / "changelog-table.md").write_text(table, encoding="utf-8")
 
+    # Regenerate the README's Results and Improvement Changelog from what was
+    # just recorded, so the reported numbers cannot drift from the files behind
+    # them and nothing is transcribed by hand.
+    banner("+", total, "Regenerate the README from the recorded runs")
+    run([PY, "scripts/render_docs.py"])
+
     print("\n" + "=" * 70)
-    print("Done. Send these back so the changelog is written from real numbers:\n")
-    print(f"  runs/{main_label}/results.md          <- the headline table")
-    print("  runs/changelog-table.md               <- the ablation comparison")
-    print("\nPasting the contents of those two files into the chat is enough.\n")
-    print("Also commit cassettes/ -- that is what lets judges reproduce for free,")
-    print("and it doubles as the agent trajectory evidence.")
+    print("Done. The README's Results and Improvement Changelog now reflect this run.\n")
+    print(f"  runs/{main_label}/results.md       headline table and per-case detail")
+    print("  runs/changelog-table.md            every configuration side by side")
+    print(f"  runs/{main_label}/traces/          one trajectory per case per system")
+    print("\nCommit all of it -- runs/ and cassettes/ are the evidence, and")
+    print("cassettes/ is what lets a reviewer replay this for free:\n")
+    print("  git add runs cassettes README.md")
+    print('  git commit -m "Recorded evaluation run"')
+    print("  git push")
     return 0
 
 

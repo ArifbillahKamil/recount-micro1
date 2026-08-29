@@ -239,16 +239,38 @@ test: measured facts, executed probes, and the gate.
 
 ## Results
 
-> **This section is generated from a recorded run.** Reproduce it with
-> `python run_all.py --model gpt-4o-mini`, then read the `results.md` written
-> under `runs/`. The committed `cassettes/` let you replay the same run offline
-> for free with `python -m recount.evaluate --system both --offline`.
+> Everything below is generated from the committed `runs/` by
+> [`scripts/render_docs.py`](scripts/render_docs.py) — no number here is typed by
+> hand, and `python3 scripts/render_docs.py --check` fails if the README drifts
+> from the files.
 >
-> _Awaiting the live run. No numbers are claimed here until they come out of the
-> harness._
+> Replay the same run yourself, with no API key and at no cost:
+> `python3 -m recount.evaluate --system both --offline`
 
 <!-- RESULTS:BEGIN -->
-<!-- Populated from runs/main-<model>/results.md -->
+Recorded with `gpt-4o-mini` on the 12 bundled cases. Both systems received the same model, temperature, seed, output contract and verdict vocabulary, and were scored by the same code.
+
+| metric | baseline | Recount | change |
+|---|---|---|---|
+| **Recall on planted faults** | 88% (7/8) | **100%** (8/8) | +12 pt |
+| F1 | 93% | 84% | -9 pt |
+| Precision | 100% | 73% | -27 pt |
+| False alarms on the 4 correct queries (lower is better) | 0/4 | 3/4 | +75 pt |
+| Repair accuracy | 7/8 | 5/8 | -25 pt |
+| Bug type named correctly | 43% | 50% | +7 pt |
+| Cost per case | $0.00019 | $0.00077 | x4.1 |
+| Wall clock per case | 2.4s | 8.4s | - |
+| Model calls / tool calls | 12 / 0 | 36 / 84 | - |
+
+### Reading this honestly
+
+**Recall is the claim worth defending.** The baseline reported 1 of 8 planted faults as correct. Recount reported none as correct. On the stated problem -- a wrong number reaching a report without anyone noticing -- that is the difference that matters.
+
+**The F1 difference is not.** 93% against 84% is a gap of 9 points on 12 cases, where a single case moves F1 by roughly 8 points and the false alarm rate by 25. It is inside the noise of this sample and is reported rather than leaned on. Twelve cases can show that a mechanism works; they cannot rank two systems that are close.
+
+**Cost is a real trade.** Recount costs x4.1 the baseline and takes x3.5 the wall clock, because it executes queries instead of reading them. At a fraction of a cent per verified metric that is worth paying; it is still a cost, not a rounding error to hide.
+
+Full per-case tables, including every explanation, are in [`runs/main-gpt-4o-mini/results.md`](runs/main-gpt-4o-mini/results.md). Trajectories for all 24 runs are in [`runs/main-gpt-4o-mini/traces/`](runs/main-gpt-4o-mini/traces/) -- see [TRAJECTORIES.md](TRAJECTORIES.md).
 <!-- RESULTS:END -->
 
 ## Improvement Changelog
@@ -258,13 +280,26 @@ test: measured facts, executed probes, and the gate.
 > isolates that stage's contribution rather than asserting it.
 
 <!-- CHANGELOG:BEGIN -->
-| stage | what was tried and why | command | evidence | decision |
-|---|---|---|---|---|
-| Baseline | One direct prompt: schema + question + SQL, no tools, no execution. The reasonable first attempt. | `--system baseline` | _pending live run_ | Establishes the starting point |
-| Iteration 1 | Added the deterministic profiler, because the model was being asked to guess grain and NULL counts it could have been told. | `--system recount --no-probes --no-gate` | _pending_ | _pending_ |
-| Iteration 2 | Added agent-authored probes executed against the warehouse, so claims rest on measurements. | `--system recount --no-gate` | _pending_ | _pending_ |
-| Iteration 3 | Added the verification gate after observing the model manufacture faults on correct queries. | `--system recount` | _pending_ | _pending_ |
-| Final | All three combined. | `python run_all.py` | _pending_ | _pending_ |
+Each row is a real run. The evidence column is generated from `runs/*/results.json` by [`scripts/render_docs.py`](scripts/render_docs.py), so these numbers cannot drift from the files they came from. Rows for superseded iterations cite the commit that recorded them; recover those with `git show <commit>:runs/<label>/results.json`.
+
+| stage | what was tried and why | evidence | decision / learning |
+|---|---|---|---|
+| **Baseline** | One prompt: schema, question, SQL. The reasonable first attempt, and a strong one. | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00019/case | Starting point. Note it already scores well -- a 2026 model is good at this task. |
+| **Iteration 1**<br>profiler + probes + gate | The original design. Measure the warehouse, let the agent write and run diagnostic probes, then require a bug claim to ship a correction whose effect is checked. | F1 75%, recall 75%, 2/4 false alarms, 6/8 repairs, $0.00063/case (`80020a6`, `runs/ablation-no-recompute-…`) | **Lost to the baseline by 18 points.** Kept the components, questioned the architecture. |
+| **Iteration 2**<br>independent recomputation | The gate could only ever downgrade a bug claim, so it was structurally unable to catch a real fault waved through -- and B1 and B4 were. Added a stage that answers the question from scratch, without seeing the query under review, then compares the two numbers. | F1 89%, recall 100%, 2/4 false alarms, 8/8 repairs, $0.00076/case (`80020a6`, `runs/main-…`) | **Kept.** Recall 75% -> 100%. This is the one change that worked. |
+| **Iteration 3**<br>profile split by role | Ablations showed the profiler was hurting. The hypothesis was that reviewers need join cardinality while authors need types and formats, so the digest was split. | F1 84%, recall 100%, 3/4 false alarms, 5/8 repairs, $0.00077/case (`2666905`, `runs/main-…`) | **Removed.** It got worse. The trace showed the author writing `WHERE status IS NOT NULL` where the question required `WHERE status = 'completed'` -- the NULL warning displaced the required filter instead of adding to it. |
+| **Iteration 4**<br>formats only, profiler and probes deleted | If naming a hazard makes an author defend against it, give it no hazards: only how values are stored. The warehouse profiler and the probe loop were removed from the reported path. | F1 84%, recall 100%, 3/4 false alarms, 5/8 repairs, $0.00077/case | **Final.** This is the configuration reported above. |
+
+### What each component is worth
+
+Measured against the reported configuration, on the same cases and the same model.
+
+| variant | what it changes | result |
+|---|---|---|
+| `--no-recompute` | Remove the recomputation — the only stage that earns its place | F1 75%, recall 75%, 2/4 false alarms, 4/8 repairs, $0.00064/case |
+| `--no-gate` | Accept the model verdict as-is — what the gate is worth once recomputation exists | F1 84%, recall 100%, 3/4 false alarms, 5/8 repairs, $0.00077/case |
+
+> Not yet recorded: `no-formats`, `add-profile`, `add-probes`. Produce them with `python3 run_all.py --model gpt-4o-mini`.
 <!-- CHANGELOG:END -->
 
 ---
@@ -361,31 +396,74 @@ the evaluation design and the verification-gate mechanism are the contribution.
 
 ## Main failure mode, and the hot take
 
-**The failure mode.** Before the gate existed, the system's problem was not
-missing faults — it was manufacturing them. Given a correct query and asked
-whether it was wrong, the model found something wrong, phrased it fluently, and
-attached high confidence. The three adversarial CLEAN cases exist because that
-behaviour is invisible in any evaluation made only of broken queries. Measure
-only recall and this system looks excellent while being unusable.
+### The failure mode: I twice shipped a mechanism that never fired
 
-**The hot take.**
+The verification gate was described, in an earlier version of this README, as
+the load-bearing idea. The ablation says otherwise. `--no-gate` came back
+**byte-identical** to the full run — same F1, same false alarms, same repairs,
+zero escalations — not once but across two rewrites of it.
 
-> Don't ask an agent to be careful. Make its claim executable.
+It was not broken. It was structurally incapable. It could only ever *downgrade*
+a bug claim, so it had no way to contradict a CLEAN verdict, which is precisely
+the case that costs money: B1's 2.61x overstatement and B4's 93% row loss were
+both waved through while the gate watched. Asymmetric verification can only find
+the error you already suspect.
 
-Prompting harder does not fix an over-eager reviewer. "Be conservative", "only
-flag high-confidence issues", "think step by step" — all of it produces a more
-eloquent version of the same wrong answer, because the model cannot tell its
-correct reasoning from its incorrect reasoning. Self-reported confidence is
-not a signal; it is a fluency artifact.
+The probe loop went the same way. Agent writes hypotheses, runs diagnostic
+queries, feeds results back — it reads like good agent design, and once
+recomputation existed it contributed *nothing*: identical on every metric at
+under half the cost. Deleted.
 
-What worked was changing what counts as a claim. Instead of "explain why this is
-wrong", the requirement became "produce an artifact whose effect can be
-measured" — a corrected query. Then the system stops arbitrating between
-explanations and starts running a diff. An over-eager reviewer's correction
-returns the same number as the original, and that is not an opinion about
-whether it was over-eager. It is a fact.
+Three of the four components I built were dead weight or worse. The one that
+worked was the dullest: run the query, run an independent derivation, compare the
+two numbers. It was in the project's name from day one.
 
-The general shape: when an agent's output is an argument, you have to trust it.
-When its output is executable, you can check it. Wherever there is a choice,
-design the agent's deliverable so that being wrong is *observable* — and put
-the check outside the model, where the model's confidence cannot reach it.
+### The hot take
+
+> Don't ask an agent to be careful. Make its claim executable — and give each
+> role only the context its own job needs.
+
+Two halves, both learned the hard way.
+
+**Make the claim executable.** Prompting harder does not fix an over-eager
+reviewer. "Be conservative", "only flag high-confidence issues" — each produces a
+more eloquent version of the same wrong answer, because a model cannot
+distinguish its correct reasoning from its incorrect reasoning. Self-reported
+confidence is not a signal, it is a fluency artifact. What worked was changing
+what counts as a claim: not "explain why this is wrong" but "produce an artifact
+whose effect can be measured". Two queries and a diff is not an opinion about
+who is right.
+
+**Give each role only what its job needs.** This one surprised me. The
+deterministic profiler measures join cardinality exactly and cannot hallucinate,
+and it made the system *worse* — removing it took F1 from 84% to 94%.
+
+The facts were correct. They were too loud. Told
+`status: NULL in 80 rows -- a predicate on this column must handle NULL
+explicitly`, the author wrote:
+
+```sql
+WHERE o.status IS NOT NULL          -- what the warning asked for
+```
+
+where the question required:
+
+```sql
+WHERE o.status = 'completed'        -- what the analyst asked for
+```
+
+It did not add a redundant filter. It **replaced the required one**. Given no
+profile at all, the same model wrote the correct filter every time.
+
+A hazard named to an author becomes the thing it optimises for, and it competes
+with the task. Withholding the facts entirely fails differently — the author then
+wrote `'2026-01-01T00:00:00Z'` against values stored `'2026-01-01 02:11:00'`, and
+because `T` sorts after a space that silently dropped a day. So the fix was not
+*less* context or *more*, but context with no hazard framing at all: how values
+are stored, stated as fact, with nothing to defend against.
+
+**What I would do differently next time.** Write the ablation harness before the
+second component, not after the fourth. Every wrong turn here was visible in one
+run of `--no-X`, and I built three more stages before looking. And treat
+"this mechanism is the core of my design" as a hypothesis with a switch attached,
+because the two times I was most confident are the two times I was wrong.
