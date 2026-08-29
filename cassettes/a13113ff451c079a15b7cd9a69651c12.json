@@ -1,7 +1,7 @@
 {
   "cassette_key": "a13113ff451c079a15b7cd9a69651c12",
   "step": "baseline_review",
-  "recorded_at": "2026-08-29T01:51:28Z",
+  "recorded_at": "2026-08-29T02:14:29Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2WRNhpVVxlDn7wKthkvykD1Olk0",
+    "id": "chatcmpl-EI2siOeeDALOnQ4aJ9NDjTvqeeNft",
     "object": "chat.completion",
-    "created": 1787968307,
+    "created": 1787969688,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query sums the payment amounts from the payments table, but it does not filter for completed orders only. The orders table has a status column that should be checked to ensure only completed orders are included in the revenue calculation.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query sums the payment amounts from the payments table but does not filter for completed orders. The orders table has a status column that should be checked to ensure only completed orders are included in the revenue calculation.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 776,
-      "completion_tokens": 117,
-      "total_tokens": 893,
+      "completion_tokens": 114,
+      "total_tokens": 890,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

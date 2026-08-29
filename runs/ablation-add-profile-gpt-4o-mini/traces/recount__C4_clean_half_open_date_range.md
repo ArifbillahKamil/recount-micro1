@@ -1,6 +1,6 @@
 # Trajectory — recount — C4_clean_half_open_date_range
 
-`2` model calls (`2` replayed from cassette) · `3` tool calls · `1464` tokens · `$0.00032`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1515` tokens · `$0.00033`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -63,7 +63,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 354 in / 88 out · 0.00s
+`gpt-4o-mini` · replayed · 401 in / 92 out · 0.00s
 
 **system**
 
@@ -98,6 +98,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 january_orders
 
@@ -109,7 +113,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL", "reasoning": "I counted the distinct order_ids for the month of January 2026, ensuring to filter out any rows with a NULL status."}
+{"sql": "SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL", "reasoning": "I counted the distinct order_ids for January 2026, ensuring to filter out any NULL statuses and using the correct date format for the UTC timezone."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -134,7 +138,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 882 in / 140 out · 0.00s
+`gpt-4o-mini` · live call · 882 in / 140 out · 1.71s
 
 **system**
 

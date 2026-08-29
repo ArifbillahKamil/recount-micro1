@@ -1,6 +1,6 @@
 # Trajectory — recount — C4_clean_half_open_date_range
 
-`1` model calls (`1` replayed from cassette) · `1` tool calls · `1026` tokens · `$0.00020`
+`1` model calls (`0` replayed from cassette) · `1` tool calls · `1015` tokens · `$0.00019`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -40,7 +40,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 924 in / 102 out · 0.00s
+`gpt-4o-mini` · live call · 924 in / 91 out · 1.77s
 
 **system**
 
@@ -173,7 +173,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1.0,
-  "explanation": "The SQL query correctly counts the number of orders placed in January 2026 by filtering the 'orders' table based on the 'order_ts' timestamp. The date range specified accurately captures all orders within the month of January 2026 in UTC. No discrepancies were found in the execution of the query.",
+  "explanation": "The SQL query correctly counts the number of orders placed in January 2026 by filtering on the order_ts column in the orders table. The date range specified accurately captures all orders within that month. No discrepancies were found in the logic of the query.",
   "corrected_sql": null
 }
 ```

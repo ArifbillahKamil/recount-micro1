@@ -1,7 +1,7 @@
 {
   "cassette_key": "c9a6e8460545fb055a6b645b96005fc1",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:52:55Z",
+  "recorded_at": "2026-08-29T02:15:59Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2XqNjognT8k8IMrhNExbqrSawOn",
+    "id": "chatcmpl-EI2uAcJbPURcEvO99eYpQvp87CbIP",
     "object": "chat.completion",
-    "created": 1787968394,
+    "created": 1787969778,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"mixed_unit_aggregation\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review aggregates units sold from the order_items table based on completed orders, but the independent recomputation indicates a discrepancy in the total units sold. The difference suggests that the query may not be correctly filtering or aggregating the data from the orders and payments tables.\",\n  \"corrected_sql\": \"SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"mixed_unit_aggregation\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review aggregates units sold from order_items based on completed orders, but the independent recomputation indicates a higher total when considering all non-null statuses. This suggests that the filtering on order status may be excluding relevant order_items.\",\n  \"corrected_sql\": \"SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1082,
-      "completion_tokens": 129,
-      "total_tokens": 1211,
+      "completion_tokens": 121,
+      "total_tokens": 1203,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

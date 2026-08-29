@@ -1,6 +1,6 @@
 # Trajectory — recount — B6_timezone_day_misattribution
 
-`1` model calls (`1` replayed from cassette) · `2` tool calls · `1050` tokens · `$0.00021`
+`1` model calls (`0` replayed from cassette) · `2` tool calls · `1051` tokens · `$0.00021`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -40,7 +40,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 930 in / 120 out · 0.00s
+`gpt-4o-mini` · live call · 930 in / 121 out · 1.44s
 
 **system**
 
@@ -173,12 +173,12 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "timezone_day_boundary",
   "confidence": 0.9,
-  "explanation": "The query counts orders based on the UTC date without considering the Asia/Jakarta timezone (UTC+7). This could lead to incorrect results if orders were placed late on January 30th UTC, which would fall into January 31st in Jakarta time.",
+  "explanation": "The query counts orders based on the UTC date without considering the Asia/Jakarta timezone (UTC+7). This could lead to incorrect results if orders were placed on the evening of January 30th UTC, which would fall into January 31st in Jakarta.",
   "corrected_sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'"
 }
 ```
 
-## 7. tool · `run_sql` · gate_execute_correction · ok
+## 7. tool · `run_sql` · gate_execute_correction · FAILED
 
 **request**
 
@@ -189,18 +189,9 @@ SELECT COUNT(*) AS orders_on_day FROM orders WHERE date(order_ts, 'localtime') =
 **response**
 
 ```
-orders_on_day
--------------
-19           
+"'localtime'" makes the result depend on the machine running the query, so it cannot be reproduced. Use an explicit offset such as date(col, '+7 hours') instead of 'localtime', and a literal date instead of 'now'.
 ```
 
 ## 8. gate · verification_gate
 
-**BUG** — the correction executes and returns a different result, so the discrepancy is demonstrated
-
-```json
-{
-  "reported": "orders_on_day\n-------------\n12           ",
-  "corrected": "orders_on_day\n-------------\n19           "
-}
-```
+**ESCALATE** — the proposed correction does not execute ("'localtime'" makes the result depend on the machine running the query, so it cannot be reproduced. Use an explicit offset such as date(col, '+7 hours') instead of 'localtime', and a literal date instead of 'now'.), so the bug claim is unproven

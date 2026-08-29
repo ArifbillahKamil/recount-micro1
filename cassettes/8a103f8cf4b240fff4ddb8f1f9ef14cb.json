@@ -1,7 +1,7 @@
 {
   "cassette_key": "8a103f8cf4b240fff4ddb8f1f9ef14cb",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:51:39Z",
+  "recorded_at": "2026-08-29T02:14:39Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2WcKXDKtD3gXq4AzZEuVfjkB7h1",
+    "id": "chatcmpl-EI2ssBGe5A02V879Fj9kC9lsm0vuZ",
     "object": "chat.completion",
-    "created": 1787968318,
+    "created": 1787969698,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"wrong_aggregation_grain\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review aggregates payments based on completed orders but also includes order items, which leads to a higher total due to multiple entries for each order. The independent recomputation correctly sums payments directly related to completed orders without the additional granularity of order items.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"wrong_aggregation_grain\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review aggregates payments based on completed orders but also joins with order_items, which introduces a finer grain that inflates the total captured amount. The independent recomputation, which only considers payments linked to completed orders, returned a significantly lower total, indicating a discrepancy.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1040,
-      "completion_tokens": 127,
-      "total_tokens": 1167,
+      "completion_tokens": 130,
+      "total_tokens": 1170,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

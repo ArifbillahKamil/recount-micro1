@@ -1,6 +1,6 @@
 # Trajectory — recount — B2_fanout_units_via_payments
 
-`2` model calls (`2` replayed from cassette) · `3` tool calls · `1903` tokens · `$0.00037`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1950` tokens · `$0.00037`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -55,7 +55,7 @@ Write literals in exactly this format. A differently formatted string compares a
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 696 in / 59 out · 0.00s
+`gpt-4o-mini` · live call · 743 in / 59 out · 1.30s
 
 **system**
 
@@ -147,6 +147,10 @@ SQLite warehouse.
 Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
+
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
 
 Return exactly these columns, in this order, with these names:
 units_sold

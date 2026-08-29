@@ -1,6 +1,6 @@
 # Trajectory — recount — C1_clean_distinct_order_count_with_payments
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1732` tokens · `$0.00037`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1751` tokens · `$0.00036`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -73,7 +73,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 460 in / 96 out · 1.39s
+`gpt-4o-mini` · live call · 507 in / 78 out · 1.16s
 
 **system**
 
@@ -115,6 +115,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 orders_seen, captured_cents
 
@@ -126,7 +130,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o LEFT JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL", "reasoning": "I counted distinct order_ids from the orders table where status is not NULL to ensure only completed orders are included, and summed the amount_cents from the payments table to capture the total amount for those orders."}
+{"sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o LEFT JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL", "reasoning": "The query counts distinct completed orders (where status is not NULL) and sums the payment amounts associated with those orders."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -151,7 +155,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1028 in / 148 out · 0.00s
+`gpt-4o-mini` · live call · 1028 in / 138 out · 1.43s
 
 **system**
 
@@ -257,7 +261,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "wrong_aggregation_grain",
   "confidence": 0.9,
-  "explanation": "The query under review counts distinct orders from the 'orders' table where the status is 'completed' and joins with the 'payments' table. However, the independent recomputation indicates that there are more completed orders than captured payments, suggesting that the join may be incorrectly filtering out some completed orders.",
+  "explanation": "The query under review counts distinct completed orders but only includes payments associated with those orders, leading to a lower count of orders seen. The independent recomputation shows a higher count of orders, indicating that the join to payments is incorrectly limiting the results.",
   "corrected_sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o LEFT JOIN payments p ON o.order_id = p.order_id WHERE o.status = 'completed'"
 }
 ```

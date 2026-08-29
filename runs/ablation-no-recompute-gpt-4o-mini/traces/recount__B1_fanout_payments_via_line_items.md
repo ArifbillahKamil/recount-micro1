@@ -1,6 +1,6 @@
 # Trajectory — recount — B1_fanout_payments_via_line_items
 
-`1` model calls (`1` replayed from cassette) · `1` tool calls · `1054` tokens · `$0.00020`
+`1` model calls (`0` replayed from cassette) · `1` tool calls · `1051` tokens · `$0.00020`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -42,7 +42,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 950 in / 104 out · 0.00s
+`gpt-4o-mini` · live call · 950 in / 101 out · 2.12s
 
 **system**
 
@@ -176,8 +176,8 @@ actually lives at that finer grain.
 {
   "verdict": "CLEAN",
   "bug_type": null,
-  "confidence": 0.9,
-  "explanation": "The SQL query correctly sums the amount captured from completed orders by joining the orders, order_items, and payments tables. The condition on the order status ensures that only completed orders are considered, which aligns with the business question. The result of 14274325000 cents appears to be a valid total for captured payments.",
+  "confidence": 1.0,
+  "explanation": "The SQL query correctly sums the amount captured from completed orders by joining the orders, order_items, and payments tables. The condition on the order status ensures that only completed orders are considered, which aligns with the business question. The result of 14274325000 cents accurately reflects the total captured amount.",
   "corrected_sql": null
 }
 ```

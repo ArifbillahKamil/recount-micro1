@@ -1,7 +1,7 @@
 {
   "cassette_key": "4b893f950463d668652a942f3a7a761c",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:52:05Z",
+  "recorded_at": "2026-08-29T02:15:09Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2X3mBcp5OUFo3YCmpn4cLklodwE",
+    "id": "chatcmpl-EI2tMxuQWVnUG0PrduOMBUDHeMY37",
     "object": "chat.completion",
-    "created": 1787968345,
+    "created": 1787969728,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 1,\n  \"explanation\": \"The query correctly counts the number of orders that are not cancelled by using the COALESCE function to treat unset statuses as not cancelled. Both the query under review and the independent recomputation returned the same result from the orders table.\",\n  \"corrected_sql\": null\n}",
+          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 1.0,\n  \"explanation\": \"The query correctly counts the number of orders that are not cancelled by using the COALESCE function to treat unset statuses as not cancelled. Both the query under review and the independent recomputation returned the same result of 1357 active orders from the orders table.\",\n  \"corrected_sql\": null\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 990,
-      "completion_tokens": 85,
-      "total_tokens": 1075,
+      "completion_tokens": 93,
+      "total_tokens": 1083,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

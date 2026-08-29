@@ -1,6 +1,6 @@
 # Trajectory — recount — C2_clean_units_sold_at_line_grain
 
-`2` model calls (`2` replayed from cassette) · `2` tool calls · `1749` tokens · `$0.00034`
+`2` model calls (`2` replayed from cassette) · `2` tool calls · `1799` tokens · `$0.00035`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -33,7 +33,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 576 in / 72 out · 0.00s
+`gpt-4o-mini` · replayed · 623 in / 71 out · 0.00s
 
 **system**
 
@@ -119,6 +119,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 units_sold
 
@@ -130,7 +134,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of items sold from the order_items table, filtered by completed orders in the orders table to ensure only finalized sales are counted."}
+{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of items sold from order_items where the corresponding orders have a status of 'completed', ensuring we only count completed orders."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -155,7 +159,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1006 in / 95 out · 0.00s
+`gpt-4o-mini` · replayed · 1006 in / 99 out · 0.00s
 
 **system**
 
@@ -300,7 +304,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "The query correctly sums the quantity of order items from the order_items table, filtered by completed orders in the orders table. Both the query under review and the independent recomputation returned the same result of 2993 units sold. This confirms that the SQL accurately answers the business question.",
+  "explanation": "The query correctly sums the quantity of order items from the order_items table, filtered by completed orders in the orders table. Both the query under review and the independent recomputation returned the same result of 2993 units sold. This confirms the accuracy of the metric as it aligns with the business question.",
   "corrected_sql": null
 }
 ```

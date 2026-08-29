@@ -1,6 +1,6 @@
 # Trajectory — recount — B7_mixed_currency_unit_error
 
-`3` model calls (`2` replayed from cassette) · `6` tool calls · `3525` tokens · `$0.00085`
+`3` model calls (`1` replayed from cassette) · `6` tool calls · `3548` tokens · `$0.00084`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -33,7 +33,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 592 in / 75 out · 0.00s
+`gpt-4o-mini` · replayed · 639 in / 76 out · 0.00s
 
 **system**
 
@@ -119,6 +119,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 idr_revenue_cents
 
@@ -130,7 +134,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'", "reasoning": "The query sums the payment amounts for completed orders in IDR currency, ensuring we capture only the relevant revenue."}
+{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'", "reasoning": "I summed the payment amounts for orders in IDR currency that have a completed status to calculate the total captured revenue."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -138,7 +142,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
+SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
 ```
 
 **response**
@@ -151,7 +155,7 @@ idr_revenue_cents
 
 ## 6. model · plan
 
-`gpt-4o-mini` · replayed · 821 in / 482 out · 0.00s
+`gpt-4o-mini` · live call · 821 in / 478 out · 4.38s
 
 **system**
 
@@ -276,13 +280,13 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "The query may include payments from orders that are not in IDR currency",
       "bug_type": "missing_filter",
       "probe_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'",
-      "settles": "If the result is different from 5468920000, it confirms the issue; if it is the same, the issue is ruled out."
+      "settles": "If the result is different from 5468920000, it confirms the issue; if it matches, the issue is ruled out."
     },
     {
       "risk": "The query may include payments for refunded orders",
       "bug_type": "missing_filter",
       "probe_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.refund_id IS NULL",
-      "settles": "If the result is different from 5468920000, it confirms the issue; if it is the same, the issue is ruled out."
+      "settles": "If the result is different from 5468920000, it confirms the issue; if it matches, the issue is ruled out."
     },
     {
       "risk": "The join between orders and payments may result in duplicate payment amounts due to multiple payments per order",
@@ -366,7 +370,7 @@ total_orders | total_payments
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · live call · 1409 in / 146 out · 1.64s
+`gpt-4o-mini` · live call · 1409 in / 125 out · 1.85s
 
 **system**
 
@@ -486,7 +490,7 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
+  sql: SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
   returned:
     idr_revenue_cents
     -----------------
@@ -537,7 +541,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query under review does not filter for orders in IDR currency, leading to an inflated revenue total. The independent recomputation confirms that the correct total for IDR-denominated orders is 4,743,500,000 cents, while the original query returned 5,468,920,000 cents.",
+  "explanation": "The query under review does not filter for orders in IDR currency, leading to an inflated revenue total. The independent recomputation correctly filters for IDR orders and returns a different total, indicating a discrepancy.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'"
 }
 ```

@@ -1,6 +1,6 @@
 # Trajectory — recount — B5_between_loses_last_day
 
-`1` model calls (`1` replayed from cassette) · `1` tool calls · `1013` tokens · `$0.00019`
+`1` model calls (`0` replayed from cassette) · `1` tool calls · `1015` tokens · `$0.00019`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -40,7 +40,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 921 in / 92 out · 0.00s
+`gpt-4o-mini` · live call · 921 in / 94 out · 1.31s
 
 **system**
 
@@ -173,7 +173,7 @@ actually lives at that finer grain.
   "verdict": "ESCALATE",
   "bug_type": null,
   "confidence": 0.5,
-  "explanation": "The SQL query is attempting to count orders placed in January 2026, but the data is not available for that future date. Without executing a recomputation or having access to the data for that period, I cannot confirm the accuracy of the result.",
+  "explanation": "The SQL query counts orders placed in January 2026, but the data is not available for that date as it is beyond the training data cutoff of October 2023. Without executing probes or independent recomputation, I cannot confirm the accuracy of the result.",
   "corrected_sql": null
 }
 ```

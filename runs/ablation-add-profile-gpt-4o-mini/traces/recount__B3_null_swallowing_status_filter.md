@@ -1,6 +1,6 @@
 # Trajectory — recount — B3_null_swallowing_status_filter
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1387` tokens · `$0.00029`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1427` tokens · `$0.00029`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -63,7 +63,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 364 in / 62 out · 1.13s
+`gpt-4o-mini` · live call · 411 in / 55 out · 0.94s
 
 **system**
 
@@ -98,6 +98,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 active_orders
 
@@ -109,7 +113,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'", "reasoning": "I counted all orders where the status is either NULL (indicating they are still live) or not equal to 'cancelled', ensuring I capture all active orders."}
+{"sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'", "reasoning": "I counted orders where the status is either NULL (indicating they are still live) or not marked as 'cancelled'."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -134,7 +138,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 845 in / 116 out · 0.00s
+`gpt-4o-mini` · live call · 845 in / 116 out · 1.50s
 
 **system**
 

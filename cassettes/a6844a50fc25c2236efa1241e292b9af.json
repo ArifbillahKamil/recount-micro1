@@ -1,7 +1,7 @@
 {
   "cassette_key": "a6844a50fc25c2236efa1241e292b9af",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T02:05:05Z",
+  "recorded_at": "2026-08-29T02:16:04Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2jbHjLUKn0qktudSuf2nZ3baW2q",
+    "id": "chatcmpl-EI2uFNTTQ569M6SpQJCNHgxVC5VKX",
     "object": "chat.completion",
-    "created": 1787969123,
+    "created": 1787969783,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"wrong_aggregation_grain\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review counts the number of refunds (103) instead of the total number of orders (1500). The independent recomputation indicates that there are 1420 orders seen, which suggests that the original query is aggregating at the wrong grain by focusing on refunds instead of orders.\",\n  \"corrected_sql\": \"SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status IS NOT NULL\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"wrong_aggregation_grain\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review counts the number of refunds instead of the total number of orders, leading to a discrepancy in the 'orders_seen' count. The independent recomputation shows a significantly higher number of orders, indicating that the original query does not align with the business question.\",\n  \"corrected_sql\": \"SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1038,
-      "completion_tokens": 154,
-      "total_tokens": 1192,
+      "completion_tokens": 144,
+      "total_tokens": 1182,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

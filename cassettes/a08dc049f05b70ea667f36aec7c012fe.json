@@ -1,7 +1,7 @@
 {
   "cassette_key": "a08dc049f05b70ea667f36aec7c012fe",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:52:42Z",
+  "recorded_at": "2026-08-29T02:15:43Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2Xcxmv1TnCQaBFmlAyWqQZV3sIv",
+    "id": "chatcmpl-EI2tuYhdqVijPIKIKTVab0UZLXi4Q",
     "object": "chat.completion",
-    "created": 1787968380,
+    "created": 1787969762,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review does not filter for orders with currency 'IDR', which is necessary to accurately calculate the total captured revenue in IDR. The independent recomputation correctly includes this filter, resulting in a different total revenue amount. The discrepancy indicates that the query is not aligned with the business question.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review does not filter for orders with currency 'IDR', which is necessary to accurately calculate the total captured revenue from Indonesian business. The independent recomputation correctly includes this filter and returns a different total, indicating a discrepancy.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1051,
-      "completion_tokens": 144,
-      "total_tokens": 1195,
+      "completion_tokens": 131,
+      "total_tokens": 1182,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

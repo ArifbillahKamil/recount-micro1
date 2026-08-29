@@ -1,7 +1,7 @@
 {
   "cassette_key": "f904f40a719ab9b4e74f15f6ee058d29",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:52:13Z",
+  "recorded_at": "2026-08-29T02:15:16Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2XAPVhPILfNkRheEG41kyVohE3y",
+    "id": "chatcmpl-EI2tTEBiuixlmKzadtZBIXD0nWDTN",
     "object": "chat.completion",
-    "created": 1787968352,
+    "created": 1787969735,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 0.9,\n  \"explanation\": \"The SQL query correctly counts the number of active orders by filtering out those with a status of 'cancelled'. It aligns with the business question regarding the status of orders in the 'orders' table.\",\n  \"corrected_sql\": null\n}",
+          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 0.9,\n  \"explanation\": \"The SQL query correctly counts the number of active orders by filtering out those with a 'cancelled' status from the 'orders' table. It aligns with the business question of identifying orders that are not cancelled, including those without a fulfilment status. The absence of probes and recomputation does not indicate an issue with the query itself.\",\n  \"corrected_sql\": null\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 918,
-      "completion_tokens": 81,
-      "total_tokens": 999,
+      "completion_tokens": 108,
+      "total_tokens": 1026,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

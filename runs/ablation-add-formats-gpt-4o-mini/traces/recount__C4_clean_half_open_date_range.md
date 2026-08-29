@@ -1,6 +1,6 @@
 # Trajectory — recount — C4_clean_half_open_date_range
 
-`2` model calls (`2` replayed from cassette) · `3` tool calls · `1857` tokens · `$0.00036`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1890` tokens · `$0.00036`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -50,7 +50,7 @@ Write literals in exactly this format. A differently formatted string compares a
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 654 in / 82 out · 0.00s
+`gpt-4o-mini` · replayed · 701 in / 77 out · 0.00s
 
 **system**
 
@@ -142,6 +142,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 january_orders
 
@@ -153,7 +157,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'", "reasoning": "I filtered the orders based on the order_ts to count only those placed in January 2026, ensuring the correct time range in UTC."}
+{"sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'", "reasoning": "The query counts all orders placed in January 2026 by filtering the order_ts column for the specified date range."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -178,7 +182,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1020 in / 101 out · 0.00s
+`gpt-4o-mini` · live call · 1020 in / 92 out · 1.56s
 
 **system**
 
@@ -322,7 +326,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "The query correctly counts the number of orders placed in January 2026 by filtering on the 'order_ts' column in the 'orders' table. Both the query under review and the independent recomputation returned the same result of 551 orders. The date range specified in the query aligns with the business question.",
+  "explanation": "The query correctly counts the number of orders placed in January 2026 using the 'orders' table. Both the query under review and the independent recomputation returned the same result of 551 orders. The date range specified in the query aligns with the business question.",
   "corrected_sql": null
 }
 ```

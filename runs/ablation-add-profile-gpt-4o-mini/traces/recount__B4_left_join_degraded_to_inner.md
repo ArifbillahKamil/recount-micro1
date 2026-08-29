@@ -1,6 +1,6 @@
 # Trajectory — recount — B4_left_join_degraded_to_inner
 
-`2` model calls (`0` replayed from cassette) · `3` tool calls · `1750` tokens · `$0.00037`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1778` tokens · `$0.00037`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -73,7 +73,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 465 in / 93 out · 1.29s
+`gpt-4o-mini` · live call · 512 in / 84 out · 1.14s
 
 **system**
 
@@ -115,6 +115,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 orders_seen, refunded_cents
 
@@ -126,7 +130,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status IS NOT NULL", "reasoning": "The query counts distinct orders while summing the refunded amounts, ensuring that orders without refunds are counted as zero by using a LEFT JOIN and COALESCE."}
+{"sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status IS NOT NULL", "reasoning": "The query counts distinct orders while summing the refunded amounts, ensuring that orders without refunds are counted as zero."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -151,7 +155,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · live call · 1038 in / 154 out · 2.64s
+`gpt-4o-mini` · live call · 1038 in / 144 out · 1.66s
 
 **system**
 
@@ -257,12 +261,16 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "wrong_aggregation_grain",
   "confidence": 0.9,
-  "explanation": "The query under review counts the number of refunds (103) instead of the total number of orders (1500). The independent recomputation indicates that there are 1420 orders seen, which suggests that the original query is aggregating at the wrong grain by focusing on refunds instead of orders.",
-  "corrected_sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status IS NOT NULL"
+  "explanation": "The query under review counts the number of refunds instead of the total number of orders, leading to a discrepancy in the 'orders_seen' count. The independent recomputation shows a significantly higher number of orders, indicating that the original query does not align with the business question.",
+  "corrected_sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id"
 }
 ```
 
-## 8. gate · verification_gate
+## 8. note · correction
+
+The reviewer's correction and the independent derivation disagree on the corrected value; both are reported.
+
+## 9. gate · verification_gate
 
 **BUG** — an independently derived query returns a different number, demonstrating the discrepancy
 

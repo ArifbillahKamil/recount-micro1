@@ -1,7 +1,7 @@
 {
   "cassette_key": "37f7d11195b4895c6b4f0e375995bc59",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:52:17Z",
+  "recorded_at": "2026-08-29T02:15:20Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2XEuQP0nIUEQwPpvYAJYipWn0s9",
+    "id": "chatcmpl-EI2tX2ZAUuHXNVihUi0RtdaTN9wUv",
     "object": "chat.completion",
-    "created": 1787968356,
+    "created": 1787969739,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"timezone_day_boundary\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query counts orders based on the UTC date without considering the Asia/Jakarta timezone (UTC+7). This could lead to incorrect results if orders were placed late on January 30th UTC, which would fall into January 31st in Jakarta time.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS orders_on_day FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"timezone_day_boundary\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query counts orders based on the UTC date without considering the Asia/Jakarta timezone (UTC+7). This could lead to incorrect results if orders were placed on the evening of January 30th UTC, which would fall into January 31st in Jakarta.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS orders_on_day FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 930,
-      "completion_tokens": 120,
-      "total_tokens": 1050,
+      "completion_tokens": 121,
+      "total_tokens": 1051,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

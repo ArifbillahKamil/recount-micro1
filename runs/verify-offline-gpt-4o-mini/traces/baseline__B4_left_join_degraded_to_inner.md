@@ -1,6 +1,6 @@
 # Trajectory — baseline — B4_left_join_degraded_to_inner
 
-`1` model calls (`1` replayed from cassette) · `0` tool calls · `963` tokens · `$0.00021`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `949` tokens · `$0.00020`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · replayed · 814 in / 149 out · 0.00s
+`gpt-4o-mini` · replayed · 814 in / 135 out · 0.00s
 
 **system**
 
@@ -131,14 +131,14 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "wrong_aggregation_grain",
   "confidence": 0.9,
-  "explanation": "The query counts the total number of orders but incorrectly filters out refunds with a condition on 'r.amount_cents >= 0', which is unnecessary and may lead to excluding valid refunds. Additionally, the aggregation should not be conditioned on the refund table, as it may lead to incorrect results for orders that have not been refunded.",
+  "explanation": "The query counts the total number of orders but incorrectly filters the refunds by checking if 'r.amount_cents >= 0', which is unnecessary and may lead to excluding valid refunds. The correct approach should aggregate all orders and their corresponding refunds without this condition.",
   "corrected_sql": "SELECT COUNT(*) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id"
 }
 ```
 
 ## 3. gate · final
 
-**BUG** — The query counts the total number of orders but incorrectly filters out refunds with a condition on 'r.amount_cents >= 0', which is unnecessary and may lead to excluding valid refunds. Additionally, the aggregation should not be conditioned on the refund table, as it may lead to incorrect results for orders that have not been refunded.
+**BUG** — The query counts the total number of orders but incorrectly filters the refunds by checking if 'r.amount_cents >= 0', which is unnecessary and may lead to excluding valid refunds. The correct approach should aggregate all orders and their corresponding refunds without this condition.
 
 ```json
 {

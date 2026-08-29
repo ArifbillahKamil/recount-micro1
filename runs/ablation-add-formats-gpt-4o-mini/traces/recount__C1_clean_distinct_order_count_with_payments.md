@@ -1,6 +1,6 @@
 # Trajectory — recount — C1_clean_distinct_order_count_with_payments
 
-`2` model calls (`2` replayed from cassette) · `3` tool calls · `1957` tokens · `$0.00037`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `2011` tokens · `$0.00038`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -54,7 +54,7 @@ Write literals in exactly this format. A differently formatted string compares a
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 702 in / 79 out · 0.00s
+`gpt-4o-mini` · live call · 749 in / 79 out · 1.40s
 
 **system**
 
@@ -147,6 +147,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 orders_seen, captured_cents
 
@@ -183,7 +187,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1076 in / 100 out · 0.00s
+`gpt-4o-mini` · replayed · 1076 in / 107 out · 0.00s
 
 **system**
 
@@ -329,7 +333,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "The query correctly counts distinct completed orders from the 'orders' table and sums the corresponding payment amounts from the 'payments' table. Both the recomputation and the original query returned the same results, confirming the accuracy of the data. The metrics align with the business question regarding completed orders and total captured amounts.",
+  "explanation": "The query correctly counts distinct completed orders from the 'orders' table and sums the corresponding payment amounts from the 'payments' table. Both the recomputation and the original query returned the same results, confirming the accuracy of the metrics. The join between 'orders' and 'payments' is appropriate as it captures the total amount for completed orders.",
   "corrected_sql": null
 }
 ```

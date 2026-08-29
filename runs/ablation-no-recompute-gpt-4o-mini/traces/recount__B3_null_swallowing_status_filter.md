@@ -1,6 +1,6 @@
 # Trajectory — recount — B3_null_swallowing_status_filter
 
-`1` model calls (`1` replayed from cassette) · `1` tool calls · `999` tokens · `$0.00019`
+`1` model calls (`0` replayed from cassette) · `1` tool calls · `1026` tokens · `$0.00020`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -40,7 +40,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 918 in / 81 out · 0.00s
+`gpt-4o-mini` · live call · 918 in / 108 out · 1.26s
 
 **system**
 
@@ -173,7 +173,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 0.9,
-  "explanation": "The SQL query correctly counts the number of active orders by filtering out those with a status of 'cancelled'. It aligns with the business question regarding the status of orders in the 'orders' table.",
+  "explanation": "The SQL query correctly counts the number of active orders by filtering out those with a 'cancelled' status from the 'orders' table. It aligns with the business question of identifying orders that are not cancelled, including those without a fulfilment status. The absence of probes and recomputation does not indicate an issue with the query itself.",
   "corrected_sql": null
 }
 ```

@@ -1,7 +1,7 @@
 {
   "cassette_key": "0a9edbb19c8dd5e95e23f88b6d3ab05c",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:52:08Z",
+  "recorded_at": "2026-08-29T02:15:53Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2X5FwqEzJnYv6s3KObVHLvJcvpG",
+    "id": "chatcmpl-EI2u4XdWQQg1Kfcl2Mhce6kj1r7G1",
     "object": "chat.completion",
-    "created": 1787968347,
+    "created": 1787969772,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 1,\n  \"explanation\": \"The query correctly counts the number of orders placed in January 2026 by filtering on the 'order_ts' column in the 'orders' table. Both the query under review and the independent recomputation returned the same result of 551 orders. The date range specified in the query aligns with the business question.\",\n  \"corrected_sql\": null\n}",
+          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 1,\n  \"explanation\": \"The query correctly counts the number of orders placed in January 2026 using the 'orders' table. Both the query under review and the independent recomputation returned the same result of 551 orders. The date range specified in the query aligns with the business question.\",\n  \"corrected_sql\": null\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1020,
-      "completion_tokens": 101,
-      "total_tokens": 1121,
+      "completion_tokens": 92,
+      "total_tokens": 1112,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0
@@ -55,6 +55,6 @@
       }
     },
     "service_tier": "default",
-    "system_fingerprint": "fp_83afc1e615"
+    "system_fingerprint": "fp_727abf95d6"
   }
 }

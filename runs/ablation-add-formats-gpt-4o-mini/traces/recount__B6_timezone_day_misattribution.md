@@ -1,6 +1,6 @@
 # Trajectory — recount — B6_timezone_day_misattribution
 
-`2` model calls (`2` replayed from cassette) · `3` tool calls · `1888` tokens · `$0.00037`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1918` tokens · `$0.00037`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -50,7 +50,7 @@ Write literals in exactly this format. A differently formatted string compares a
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 669 in / 91 out · 0.00s
+`gpt-4o-mini` · live call · 716 in / 84 out · 1.39s
 
 **system**
 
@@ -142,6 +142,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 orders_on_day
 
@@ -153,7 +157,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'", "reasoning": "I filtered the orders based on the order_ts to count only those placed on 31 January 2026 in the Asia/Jakarta timezone, which corresponds to the UTC range specified."}
+{"sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'", "reasoning": "I filtered the orders based on the UTC timestamps that correspond to the entire day of 31 January 2026 in the Asia/Jakarta timezone."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -178,7 +182,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1029 in / 99 out · 0.00s
+`gpt-4o-mini` · live call · 1029 in / 89 out · 1.33s
 
 **system**
 
@@ -322,7 +326,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "The query correctly counts the number of orders placed on 31 January 2026, matching the business question. Both the original query and the independent recomputation returned the same result of 12 orders. The date filtering is appropriately applied to the 'order_ts' field in the 'orders' table.",
+  "explanation": "Both the query under review and the independent recomputation return the same count of 12 orders for the specified date. The query correctly filters orders based on the UTC timestamp, which aligns with the business question regarding local days in the Asia/Jakarta timezone.",
   "corrected_sql": null
 }
 ```

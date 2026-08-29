@@ -1,6 +1,6 @@
 # Trajectory — recount — C2_clean_units_sold_at_line_grain
 
-`3` model calls (`2` replayed from cassette) · `6` tool calls · `3373` tokens · `$0.00080`
+`3` model calls (`1` replayed from cassette) · `6` tool calls · `3273` tokens · `$0.00075`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -33,7 +33,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 576 in / 72 out · 0.00s
+`gpt-4o-mini` · replayed · 623 in / 71 out · 0.00s
 
 **system**
 
@@ -119,6 +119,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 units_sold
 
@@ -130,7 +134,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of items sold from the order_items table, filtered by completed orders in the orders table to ensure only finalized sales are counted."}
+{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of items sold from order_items where the corresponding orders have a status of 'completed', ensuring we only count completed orders."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -151,7 +155,7 @@ units_sold
 
 ## 6. model · plan
 
-`gpt-4o-mini` · replayed · 799 in / 481 out · 0.00s
+`gpt-4o-mini` · live call · 799 in / 403 out · 3.35s
 
 **system**
 
@@ -276,25 +280,25 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "The query may be counting order items from orders that are not actually completed due to incorrect status filtering.",
       "bug_type": "missing_filter",
       "probe_sql": "SELECT COUNT(*) FROM orders WHERE status != 'completed'",
-      "settles": "A non-zero result would confirm this, while a zero result would rule it out."
+      "settles": "A non-zero result would confirm this, indicating there are orders not filtered out, while a zero result would rule it out."
     },
     {
       "risk": "The query may be counting order items that are associated with orders that have been refunded, leading to inflated unit sales.",
-      "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND o.order_id NOT IN (SELECT order_id FROM refunds)",
-      "settles": "If this sum is less than 2993, it would confirm the issue; if it matches or exceeds, it would rule it out."
+      "bug_type": "other",
+      "probe_sql": "SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN refunds r ON o.order_id = r.order_id WHERE o.status = 'completed'",
+      "settles": "A non-zero result would confirm this, indicating refunded items are included, while a zero result would rule it out."
     },
     {
       "risk": "The query may be counting duplicate order items due to multiple entries in the order_items table for the same order.",
       "bug_type": "fanout_join",
       "probe_sql": "SELECT COUNT(DISTINCT oi.order_item_id) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If this count is less than the original sum of 2993, it would confirm the issue; if it matches, it would rule it out."
+      "settles": "If this count is less than the original units_sold, it would confirm duplicates, while equality would rule it out."
     },
     {
       "risk": "The query may be aggregating quantities without considering different currencies, leading to incorrect totals.",
       "bug_type": "mixed_unit_aggregation",
-      "probe_sql": "SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'USD' UNION ALL SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'",
-      "settles": "If the total from this probe does not equal 2993, it would confirm the issue; if it does, it would rule it out."
+      "probe_sql": "SELECT COUNT(DISTINCT currency) FROM orders WHERE status = 'completed'",
+      "settles": "More than one distinct currency would confirm this risk, while a single currency would rule it out."
     }
   ]
 }
@@ -321,7 +325,7 @@ COUNT(*)
 **request**
 
 ```sql
-SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND o.order_id NOT IN (SELECT order_id FROM refunds)
+SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN refunds r ON o.order_id = r.order_id WHERE o.status = 'completed'
 ```
 
 **response**
@@ -329,7 +333,7 @@ SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.ord
 ```
 SUM(oi.quantity)
 ----------------
-2945            
+48              
 ```
 
 ## 9. tool · `run_sql` · probe_3 · ok
@@ -353,21 +357,20 @@ COUNT(DISTINCT oi.order_item_id)
 **request**
 
 ```sql
-SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'USD' UNION ALL SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'
+SELECT COUNT(DISTINCT currency) FROM orders WHERE status = 'completed'
 ```
 
 **response**
 
 ```
-SUM(oi.quantity)
-----------------
-384             
-2609            
+COUNT(DISTINCT currency)
+------------------------
+2                       
 ```
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · live call · 1346 in / 99 out · 1.31s
+`gpt-4o-mini` · live call · 1283 in / 94 out · 1.32s
 
 **system**
 
@@ -465,11 +468,11 @@ Probes you designed, and what executing them actually returned:
     402     
 
 [2] risk: The query may be counting order items that are associated with orders that have been refunded, leading to inflated unit sales.
-    probe: SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND o.order_id NOT IN (SELECT order_id FROM refunds)
+    probe: SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN refunds r ON o.order_id = r.order_id WHERE o.status = 'completed'
     returned:
     SUM(oi.quantity)
     ----------------
-    2945            
+    48              
 
 [3] risk: The query may be counting duplicate order items due to multiple entries in the order_items table for the same order.
     probe: SELECT COUNT(DISTINCT oi.order_item_id) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'
@@ -479,12 +482,11 @@ Probes you designed, and what executing them actually returned:
     2169                            
 
 [4] risk: The query may be aggregating quantities without considering different currencies, leading to incorrect totals.
-    probe: SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'USD' UNION ALL SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'
+    probe: SELECT COUNT(DISTINCT currency) FROM orders WHERE status = 'completed'
     returned:
-    SUM(oi.quantity)
-    ----------------
-    384             
-    2609            
+    COUNT(DISTINCT currency)
+    ------------------------
+    2                       
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
@@ -539,7 +541,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "The query correctly sums the quantities of order items from completed orders, as confirmed by the independent recomputation. Both the query under review and the recomputation returned the same result of 2993 units sold. There are no indications of issues with the joins or filters based on the provided schema and data.",
+  "explanation": "The query correctly sums the quantities of order items from completed orders, as confirmed by the independent recomputation. Both the original query and the recomputation returned the same result of 2993 units sold. There are no issues with the filtering or aggregation based on the provided schema.",
   "corrected_sql": null
 }
 ```

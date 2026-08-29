@@ -1,7 +1,7 @@
 {
   "cassette_key": "e0e56d7b6c5ed2fa891ace81e05f300b",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:52:01Z",
+  "recorded_at": "2026-08-29T02:15:04Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2WyFuYYjGci7LzQ22buHi8f9Tex",
+    "id": "chatcmpl-EI2tGCSU9Oq852mZgO3ZGeJsu4Cz0",
     "object": "chat.completion",
-    "created": 1787968340,
+    "created": 1787969722,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 1,\n  \"explanation\": \"The query correctly counts distinct completed orders from the 'orders' table and sums the corresponding payment amounts from the 'payments' table. Both the recomputation and the original query returned the same results, confirming the accuracy of the data. The metrics align with the business question regarding completed orders and total captured amounts.\",\n  \"corrected_sql\": null\n}",
+          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 1,\n  \"explanation\": \"The query correctly counts distinct completed orders from the 'orders' table and sums the corresponding payment amounts from the 'payments' table. Both the recomputation and the original query returned the same results, confirming the accuracy of the metrics. The join between 'orders' and 'payments' is appropriate as it captures the total amount for completed orders.\",\n  \"corrected_sql\": null\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1076,
-      "completion_tokens": 100,
-      "total_tokens": 1176,
+      "completion_tokens": 107,
+      "total_tokens": 1183,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

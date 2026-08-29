@@ -1,6 +1,6 @@
 # Trajectory — recount — B5_between_loses_last_day
 
-`2` model calls (`2` replayed from cassette) · `2` tool calls · `1857` tokens · `$0.00040`
+`2` model calls (`0` replayed from cassette) · `2` tool calls · `1902` tokens · `$0.00040`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -32,7 +32,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 580 in / 83 out · 0.00s
+`gpt-4o-mini` · live call · 627 in / 83 out · 1.27s
 
 **system**
 
@@ -118,6 +118,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 january_orders
 
@@ -154,7 +158,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1019 in / 175 out · 0.00s
+`gpt-4o-mini` · live call · 1019 in / 173 out · 1.83s
 
 **system**
 
@@ -298,7 +302,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "date_range_truncation",
   "confidence": 0.9,
-  "explanation": "The query under review uses a date range that includes the entire day of January 31, 2026, but does not account for the time component, leading to an incorrect count of orders. The independent recomputation correctly uses a range that captures all orders from the start of January 1 to just before February 1, ensuring all orders in January are included. This discrepancy indicates a truncation issue in the date range.",
+  "explanation": "The query under review uses a date range that includes the entire day of January 31, 2026, but does not account for the time component, leading to an incorrect count of orders. The independent recomputation correctly uses a range that captures all orders in January 2026 by specifying the start and end of the month with time precision. This discrepancy indicates that the query does not accurately reflect the business question.",
   "corrected_sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'"
 }
 ```

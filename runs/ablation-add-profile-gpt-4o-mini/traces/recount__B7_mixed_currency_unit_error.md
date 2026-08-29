@@ -1,6 +1,6 @@
 # Trajectory — recount — B7_mixed_currency_unit_error
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1684` tokens · `$0.00035`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1715` tokens · `$0.00035`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -72,7 +72,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 465 in / 85 out · 1.34s
+`gpt-4o-mini` · live call · 512 in / 76 out · 1.25s
 
 **system**
 
@@ -114,6 +114,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 idr_revenue_cents
 
@@ -125,7 +129,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.currency = 'IDR'", "reasoning": "I joined the orders and payments tables on order_id, filtered for completed orders (non-null status) in IDR currency, and summed the payment amounts in cents."}
+{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.currency = 'IDR'", "reasoning": "The query sums the payment amounts for completed orders in IDR, ensuring to filter out any orders with a NULL status."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -150,7 +154,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1001 in / 133 out · 0.00s
+`gpt-4o-mini` · live call · 1001 in / 126 out · 1.47s
 
 **system**
 
@@ -255,8 +259,8 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query under review does not filter for the currency 'IDR', which is necessary to accurately calculate the total captured revenue in IDR-denominated orders. The independent recomputation correctly includes this filter and returns a different total, indicating a discrepancy.",
-  "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'"
+  "explanation": "The query under review does not filter for the currency 'IDR', which is necessary to accurately capture the revenue from Indonesian business. The independent recomputation correctly includes this filter and returns a different total revenue amount.",
+  "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'"
 }
 ```
 

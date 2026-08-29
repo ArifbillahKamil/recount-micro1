@@ -1,6 +1,6 @@
 {
   "label": "ablation-add-profile-gpt-4o-mini",
-  "generated_at": "2026-08-29T02:05:19Z",
+  "generated_at": "2026-08-29T02:16:24Z",
   "config": {
     "model": "gpt-4o-mini",
     "mode": "auto",
@@ -30,8 +30,8 @@
         "recall": 1.0,
         "f1": 0.8421,
         "false_alarm_rate": 0.75,
-        "repair_accuracy": 0.5,
-        "repairs_correct": 4,
+        "repair_accuracy": 0.625,
+        "repairs_correct": 5,
         "repairs_attempted": 8,
         "bug_type_accuracy": 0.375,
         "escalations_on_bug": 0,
@@ -39,21 +39,21 @@
         "errors": 0,
         "net_analyst_minutes_modelled": 72.0,
         "time_model": "confirmed bug +12 min, false alarm -8 min, escalation -4 min, missed bug 0 min (counted as recall, not time)",
-        "total_cost_usd": 0.004008,
-        "cost_per_case_usd": 0.000334,
+        "total_cost_usd": 0.004045,
+        "cost_per_case_usd": 0.000337,
         "cost_known": true,
-        "total_latency_s": 22.45,
-        "latency_per_case_s": 1.87,
+        "total_latency_s": 30.93,
+        "latency_per_case_s": 2.58,
         "llm_calls": 24,
         "tool_calls": 36
       },
       "client": {
         "model": "gpt-4o-mini",
         "mode": "auto",
-        "cassette_hits": 10,
-        "cassette_misses": 14,
-        "live_calls": 14,
-        "billed_cost_usd": 0.001913,
+        "cassette_hits": 1,
+        "cassette_misses": 23,
+        "live_calls": 23,
+        "billed_cost_usd": 0.00393,
         "pricing_known": true,
         "parameter_quirks_applied": [],
         "completion_budget_scale": 1
@@ -69,12 +69,12 @@
           "confidence": 0.9,
           "repair_attempted": true,
           "repair_correct": true,
-          "latency_s": 1.72,
-          "cost_usd": 0.000356,
+          "latency_s": 2.82,
+          "cost_usd": 0.000363,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,
-          "explanation": "The query under review aggregates payments based on completed orders but includes all payments regardless of their status, leading to an inflated total. The independent recomputation correctly filters payments based on the order status, resulting in a significantly lower total."
+          "explanation": "The query under review aggregates payments based on completed orders but does not filter out payments that are not associated with completed orders correctly. The independent recomputation shows a significantly lower total, indicating that the join with order_items is causing an overcount."
         },
         {
           "case_id": "B2_fanout_units_via_payments",
@@ -85,13 +85,13 @@
           "class": "TP",
           "confidence": 0.9,
           "repair_attempted": true,
-          "repair_correct": true,
-          "latency_s": 1.22,
-          "cost_usd": 0.000356,
+          "repair_correct": false,
+          "latency_s": 2.48,
+          "cost_usd": 0.000358,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,
-          "explanation": "The query under review aggregates units sold from the order_items table based on completed orders, but the independent recomputation indicates a discrepancy in the total units sold. The difference suggests that the query may not be correctly filtering or aggregating the data from the orders and payments tables."
+          "explanation": "The query under review aggregates units sold from order_items based on completed orders, but the independent recomputation indicates a higher total when considering all non-null statuses. This suggests that the filtering on order status may be excluding relevant order_items."
         },
         {
           "case_id": "B3_null_swallowing_status_filter",
@@ -103,8 +103,8 @@
           "confidence": 0.9,
           "repair_attempted": true,
           "repair_correct": true,
-          "latency_s": 1.14,
-          "cost_usd": 0.000288,
+          "latency_s": 2.44,
+          "cost_usd": 0.000291,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,
@@ -119,13 +119,13 @@
           "class": "TP",
           "confidence": 0.9,
           "repair_attempted": true,
-          "repair_correct": false,
-          "latency_s": 3.94,
-          "cost_usd": 0.000374,
+          "repair_correct": true,
+          "latency_s": 2.81,
+          "cost_usd": 0.000369,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,
-          "explanation": "The query under review counts the number of refunds (103) instead of the total number of orders (1500). The independent recomputation indicates that there are 1420 orders seen, which suggests that the original query is aggregating at the wrong grain by focusing on refunds instead of orders."
+          "explanation": "The query under review counts the number of refunds instead of the total number of orders, leading to a discrepancy in the 'orders_seen' count. The independent recomputation shows a significantly higher number of orders, indicating that the original query does not align with the business question."
         },
         {
           "case_id": "B5_between_loses_last_day",
@@ -137,12 +137,12 @@
           "confidence": 0.9,
           "repair_attempted": true,
           "repair_correct": false,
-          "latency_s": 2.08,
-          "cost_usd": 0.000344,
+          "latency_s": 2.97,
+          "cost_usd": 0.000352,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,
-          "explanation": "The query under review counts orders placed between '2026-01-01' and '2026-01-31', which does not include orders placed on '2026-01-31' after midnight. The independent recomputation correctly uses a date range that includes the entire day of January 31st, resulting in a different count. This discrepancy indicates a truncation issue in the date range."
+          "explanation": "The query under review counts orders placed between '2026-01-01' and '2026-01-31', which includes orders on January 31st. However, the independent recomputation correctly uses a date range that excludes January 31st, leading to a discrepancy in the counts. This indicates that the date range in the original query is not aligned with the business question."
         },
         {
           "case_id": "B6_timezone_day_misattribution",
@@ -154,12 +154,12 @@
           "confidence": 0.9,
           "repair_attempted": true,
           "repair_correct": false,
-          "latency_s": 4.83,
-          "cost_usd": 0.000338,
+          "latency_s": 3.09,
+          "cost_usd": 0.00034,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,
-          "explanation": "The query under review counts orders based on the date of the timestamp, but it does not account for the time zone of Asia/Jakarta (UTC+7), which affects the day boundary. The independent recomputation correctly considers the full date range for the specified day, returning a different count."
+          "explanation": "The query under review counts orders based on the date of the timestamp, but it does not account for the local timezone of Asia/Jakarta (UTC+7). The independent recomputation correctly filters orders within the specified date range, resulting in a different count."
         },
         {
           "case_id": "B7_mixed_currency_unit_error",
@@ -171,12 +171,12 @@
           "confidence": 0.9,
           "repair_attempted": true,
           "repair_correct": true,
-          "latency_s": 1.34,
-          "cost_usd": 0.000351,
+          "latency_s": 2.72,
+          "cost_usd": 0.000348,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,
-          "explanation": "The query under review does not filter for the currency 'IDR', which is necessary to accurately calculate the total captured revenue in IDR-denominated orders. The independent recomputation correctly includes this filter and returns a different total, indicating a discrepancy."
+          "explanation": "The query under review does not filter for the currency 'IDR', which is necessary to accurately capture the revenue from Indonesian business. The independent recomputation correctly includes this filter and returns a different total revenue amount."
         },
         {
           "case_id": "B8_missing_status_filter",
@@ -185,15 +185,15 @@
           "verdict": "BUG",
           "bug_type": "missing_filter",
           "class": "TP",
-          "confidence": 0.9,
+          "confidence": 0.95,
           "repair_attempted": true,
-          "repair_correct": false,
-          "latency_s": 2.49,
-          "cost_usd": 0.000331,
+          "repair_correct": true,
+          "latency_s": 2.55,
+          "cost_usd": 0.00034,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,
-          "explanation": "The query under review does not filter out orders with a NULL status or cancelled orders, which is necessary to accurately capture revenue from completed orders only. The independent recomputation correctly includes this filter, resulting in a different revenue total."
+          "explanation": "The query under review does not filter for completed orders, which is necessary to accurately capture revenue from completed orders only. The independent recomputation correctly includes this filter, resulting in a different revenue total from the query under review."
         },
         {
           "case_id": "C1_clean_distinct_order_count_with_payments",
@@ -205,12 +205,12 @@
           "confidence": 0.9,
           "repair_attempted": true,
           "repair_correct": false,
-          "latency_s": 1.4,
-          "cost_usd": 0.00037,
+          "latency_s": 2.6,
+          "cost_usd": 0.00036,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,
-          "explanation": "The query under review counts distinct orders from the 'orders' table where the status is 'completed' and joins with the 'payments' table. However, the independent recomputation indicates that there are more completed orders than captured payments, suggesting that the join may be incorrectly filtering out some completed orders."
+          "explanation": "The query under review counts distinct completed orders but only includes payments associated with those orders, leading to a lower count of orders seen. The independent recomputation shows a higher count of orders, indicating that the join to payments is incorrectly limiting the results."
         },
         {
           "case_id": "C2_clean_units_sold_at_line_grain",
@@ -222,8 +222,8 @@
           "confidence": 0.9,
           "repair_attempted": true,
           "repair_correct": false,
-          "latency_s": 1.27,
-          "cost_usd": 0.000312,
+          "latency_s": 2.53,
+          "cost_usd": 0.000319,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,
@@ -239,12 +239,12 @@
           "confidence": 1.0,
           "repair_attempted": false,
           "repair_correct": false,
-          "latency_s": 1.03,
-          "cost_usd": 0.000266,
+          "latency_s": 2.22,
+          "cost_usd": 0.000273,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,
-          "explanation": "The query correctly counts the number of active orders by including those with a NULL status as not cancelled. Both the query under review and the independent recomputation returned the same result of 1357 active orders."
+          "explanation": "The query correctly counts the number of active orders by including orders with a NULL status as not cancelled. Both the query under review and the independent recomputation returned the same result of 1357 active orders."
         },
         {
           "case_id": "C4_clean_half_open_date_range",
@@ -256,8 +256,8 @@
           "confidence": 0.9,
           "repair_attempted": true,
           "repair_correct": false,
-          "latency_s": 0.0,
-          "cost_usd": 0.000322,
+          "latency_s": 1.71,
+          "cost_usd": 0.000332,
           "llm_calls": 2,
           "tool_calls": 3,
           "error": null,

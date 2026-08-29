@@ -1,6 +1,6 @@
 # Trajectory — recount — B2_fanout_units_via_payments
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1798` tokens · `$0.00036`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1837` tokens · `$0.00036`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -82,7 +82,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 525 in / 62 out · 1.21s
+`gpt-4o-mini` · live call · 572 in / 62 out · 1.12s
 
 **system**
 
@@ -131,6 +131,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 units_sold
 
@@ -142,7 +146,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL", "reasoning": "I summed the quantity from order_items where the corresponding orders have a non-null status to count only completed orders."}
+{"sql": "SELECT SUM(quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL", "reasoning": "I summed the quantity from order_items where the corresponding orders have a non-null status, indicating they are completed."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -167,7 +171,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1082 in / 129 out · 0.00s
+`gpt-4o-mini` · live call · 1082 in / 121 out · 1.36s
 
 **system**
 
@@ -281,16 +285,12 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "mixed_unit_aggregation",
   "confidence": 0.9,
-  "explanation": "The query under review aggregates units sold from the order_items table based on completed orders, but the independent recomputation indicates a discrepancy in the total units sold. The difference suggests that the query may not be correctly filtering or aggregating the data from the orders and payments tables.",
-  "corrected_sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'"
+  "explanation": "The query under review aggregates units sold from order_items based on completed orders, but the independent recomputation indicates a higher total when considering all non-null statuses. This suggests that the filtering on order status may be excluding relevant order_items.",
+  "corrected_sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL"
 }
 ```
 
-## 8. note · correction
-
-The reviewer's correction and the independent derivation disagree on the corrected value; both are reported.
-
-## 9. gate · verification_gate
+## 8. gate · verification_gate
 
 **BUG** — an independently derived query returns a different number, demonstrating the discrepancy
 

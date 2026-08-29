@@ -1,6 +1,6 @@
 # Trajectory — recount — C3_clean_null_safe_active_orders
 
-`3` model calls (`3` replayed from cassette) · `6` tool calls · `3106` tokens · `$0.00070`
+`3` model calls (`1` replayed from cassette) · `6` tool calls · `3156` tokens · `$0.00071`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -32,7 +32,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 582 in / 58 out · 0.00s
+`gpt-4o-mini` · replayed · 629 in / 58 out · 0.00s
 
 **system**
 
@@ -118,6 +118,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 active_orders
 
@@ -150,7 +154,7 @@ active_orders
 
 ## 6. model · plan
 
-`gpt-4o-mini` · replayed · 794 in / 385 out · 0.00s
+`gpt-4o-mini` · live call · 794 in / 391 out · 3.92s
 
 **system**
 
@@ -286,13 +290,13 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "The query does not account for orders that may have been cancelled but are still in the orders table due to data integrity issues",
       "bug_type": "other",
       "probe_sql": "SELECT COUNT(*) AS cancelled_orders FROM orders WHERE status = 'cancelled'",
-      "settles": "If cancelled_orders is greater than 0, it confirms the issue; if it is 0, the query is correct."
+      "settles": "If cancelled_orders is greater than 0, it indicates there are cancelled orders; if it is 0, the query is likely correct."
     },
     {
       "risk": "The query may not account for orders that have been refunded but are still considered active",
       "bug_type": "other",
       "probe_sql": "SELECT COUNT(*) AS refunded_orders FROM refunds",
-      "settles": "If refunded_orders is greater than 0, it confirms the issue; if it is 0, the query is correct."
+      "settles": "If refunded_orders is greater than 0, it indicates there are refunded orders; if it is 0, the query is likely correct."
     }
   ]
 }
@@ -364,7 +368,7 @@ refunded_orders
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1213 in / 74 out · 0.00s
+`gpt-4o-mini` · live call · 1213 in / 71 out · 1.47s
 
 **system**
 
@@ -534,7 +538,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "The query correctly counts the number of active orders by including those with a NULL status as not cancelled. The independent recomputation confirmed the same result, indicating consistency in the findings.",
+  "explanation": "The query correctly counts the number of active orders by including those with a NULL status as not cancelled. The independent recomputation confirms the result matches the original query.",
   "corrected_sql": null
 }
 ```

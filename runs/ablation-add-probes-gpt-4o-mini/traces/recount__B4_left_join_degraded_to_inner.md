@@ -1,6 +1,6 @@
 # Trajectory — recount — B4_left_join_degraded_to_inner
 
-`3` model calls (`3` replayed from cassette) · `6` tool calls · `3672` tokens · `$0.00086`
+`3` model calls (`1` replayed from cassette) · `6` tool calls · `3428` tokens · `$0.00079`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -34,7 +34,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 595 in / 77 out · 0.00s
+`gpt-4o-mini` · replayed · 642 in / 77 out · 0.00s
 
 **system**
 
@@ -120,6 +120,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 orders_seen, refunded_cents
 
@@ -152,7 +156,7 @@ orders_seen | refunded_cents
 
 ## 6. model · plan
 
-`gpt-4o-mini` · replayed · 842 in / 476 out · 0.00s
+`gpt-4o-mini` · live call · 842 in / 389 out · 3.16s
 
 **system**
 
@@ -275,28 +279,28 @@ out, do not propose a fan-out hypothesis about it.
 {
   "hypotheses": [
     {
-      "risk": "The LEFT JOIN on refunds may be causing orders with no refunds to be counted incorrectly.",
-      "bug_type": "left_join_degraded_to_inner",
-      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(DISTINCT r.order_id) AS refunded_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id",
-      "settles": "If distinct_orders is greater than refunded_orders, it confirms the issue. If they are equal, it rules it out."
-    },
-    {
-      "risk": "The WHERE clause may be excluding valid refunds with negative amounts, leading to an incorrect total refunded amount.",
+      "risk": "The LEFT JOIN on refunds may be causing rows to be excluded due to the WHERE clause filtering out non-refunded orders.",
       "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS total_refunds, SUM(r.amount_cents) AS total_refunded FROM refunds r WHERE r.amount_cents < 0",
-      "settles": "If total_refunds is greater than 0, it confirms the issue. If it is 0, it rules it out."
+      "probe_sql": "SELECT COUNT(*) AS total_orders FROM orders",
+      "settles": "If total_orders is greater than 103, it confirms the issue; if equal, it rules it out."
     },
     {
-      "risk": "The aggregation of refunded amounts may not be capturing all refunds due to the join condition.",
+      "risk": "The SUM of refunded amounts may be incorrectly calculated due to the WHERE clause filtering out negative refunds.",
+      "bug_type": "missing_filter",
+      "probe_sql": "SELECT COALESCE(SUM(r.amount_cents), 0) AS total_refunded FROM refunds r",
+      "settles": "If total_refunded is greater than 308416250, it confirms the issue; if equal, it rules it out."
+    },
+    {
+      "risk": "The COUNT of orders may not reflect unique orders due to multiple refunds for the same order.",
       "bug_type": "wrong_aggregation_grain",
-      "probe_sql": "SELECT o.order_id, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id GROUP BY o.order_id",
-      "settles": "If any order_id has a refunded_cents value that is not correctly reflecting the total refunds, it confirms the issue. If all values are correct, it rules it out."
+      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS unique_orders FROM orders o",
+      "settles": "If unique_orders is greater than 103, it confirms the issue; if equal, it rules it out."
     },
     {
-      "risk": "The count of orders may not be reflecting the actual number of unique orders due to duplicate entries in the refunds table.",
+      "risk": "The query may not account for orders that have been refunded but are not present in the refunds table.",
       "bug_type": "fanout_join",
-      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS unique_orders, COUNT(*) AS total_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id",
-      "settles": "If unique_orders is less than total_orders, it confirms the issue. If they are equal, it rules it out."
+      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_with_refunds FROM orders o JOIN refunds r ON r.order_id = o.order_id",
+      "settles": "If orders_with_refunds is less than 103, it confirms the issue; if equal, it rules it out."
     }
   ]
 }
@@ -307,15 +311,15 @@ out, do not propose a fan-out hypothesis about it.
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(DISTINCT r.order_id) AS refunded_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id
+SELECT COUNT(*) AS total_orders FROM orders
 ```
 
 **response**
 
 ```
-distinct_orders | refunded_orders
-----------------+----------------
-1500            | 103            
+total_orders
+------------
+1500        
 ```
 
 ## 8. tool · `run_sql` · probe_2 · ok
@@ -323,15 +327,15 @@ distinct_orders | refunded_orders
 **request**
 
 ```sql
-SELECT COUNT(*) AS total_refunds, SUM(r.amount_cents) AS total_refunded FROM refunds r WHERE r.amount_cents < 0
+SELECT COALESCE(SUM(r.amount_cents), 0) AS total_refunded FROM refunds r
 ```
 
 **response**
 
 ```
-total_refunds | total_refunded
---------------+---------------
-0             | NULL          
+total_refunded
+--------------
+308416250     
 ```
 
 ## 9. tool · `run_sql` · probe_3 · ok
@@ -339,28 +343,15 @@ total_refunds | total_refunded
 **request**
 
 ```sql
-SELECT o.order_id, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id GROUP BY o.order_id
+SELECT COUNT(DISTINCT o.order_id) AS unique_orders FROM orders o
 ```
 
 **response**
 
 ```
-order_id | refunded_cents
----------+---------------
-1        | 3370000       
-2        | 0             
-3        | 0             
-4        | 0             
-5        | 0             
-6        | 0             
-7        | 0             
-8        | 0             
-9        | 0             
-10       | 0             
-11       | 0             
-12       | 1292500       
-... 188 more row(s)
-... truncated at 200 rows
+unique_orders
+-------------
+1500         
 ```
 
 ## 10. tool · `run_sql` · probe_4 · ok
@@ -368,20 +359,20 @@ order_id | refunded_cents
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT o.order_id) AS unique_orders, COUNT(*) AS total_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id
+SELECT COUNT(DISTINCT o.order_id) AS orders_with_refunds FROM orders o JOIN refunds r ON r.order_id = o.order_id
 ```
 
 **response**
 
 ```
-unique_orders | total_orders
---------------+-------------
-1500          | 1500        
+orders_with_refunds
+-------------------
+103                
 ```
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1541 in / 141 out · 0.00s
+`gpt-4o-mini` · live call · 1332 in / 146 out · 1.87s
 
 **system**
 
@@ -472,46 +463,33 @@ CREATE TABLE sessions (
 );
 
 Probes you designed, and what executing them actually returned:
-[1] risk: The LEFT JOIN on refunds may be causing orders with no refunds to be counted incorrectly.
-    probe: SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(DISTINCT r.order_id) AS refunded_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id
+[1] risk: The LEFT JOIN on refunds may be causing rows to be excluded due to the WHERE clause filtering out non-refunded orders.
+    probe: SELECT COUNT(*) AS total_orders FROM orders
     returned:
-    distinct_orders | refunded_orders
-    ----------------+----------------
-    1500            | 103            
+    total_orders
+    ------------
+    1500        
 
-[2] risk: The WHERE clause may be excluding valid refunds with negative amounts, leading to an incorrect total refunded amount.
-    probe: SELECT COUNT(*) AS total_refunds, SUM(r.amount_cents) AS total_refunded FROM refunds r WHERE r.amount_cents < 0
+[2] risk: The SUM of refunded amounts may be incorrectly calculated due to the WHERE clause filtering out negative refunds.
+    probe: SELECT COALESCE(SUM(r.amount_cents), 0) AS total_refunded FROM refunds r
     returned:
-    total_refunds | total_refunded
-    --------------+---------------
-    0             | NULL          
+    total_refunded
+    --------------
+    308416250     
 
-[3] risk: The aggregation of refunded amounts may not be capturing all refunds due to the join condition.
-    probe: SELECT o.order_id, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id GROUP BY o.order_id
+[3] risk: The COUNT of orders may not reflect unique orders due to multiple refunds for the same order.
+    probe: SELECT COUNT(DISTINCT o.order_id) AS unique_orders FROM orders o
     returned:
-    order_id | refunded_cents
-    ---------+---------------
-    1        | 3370000       
-    2        | 0             
-    3        | 0             
-    4        | 0             
-    5        | 0             
-    6        | 0             
-    7        | 0             
-    8        | 0             
-    9        | 0             
-    10       | 0             
-    11       | 0             
-    12       | 1292500       
-    ... 188 more row(s)
-    ... truncated at 200 rows
+    unique_orders
+    -------------
+    1500         
 
-[4] risk: The count of orders may not be reflecting the actual number of unique orders due to duplicate entries in the refunds table.
-    probe: SELECT COUNT(DISTINCT o.order_id) AS unique_orders, COUNT(*) AS total_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id
+[4] risk: The query may not account for orders that have been refunded but are not present in the refunds table.
+    probe: SELECT COUNT(DISTINCT o.order_id) AS orders_with_refunds FROM orders o JOIN refunds r ON r.order_id = o.order_id
     returned:
-    unique_orders | total_orders
-    --------------+-------------
-    1500          | 1500        
+    orders_with_refunds
+    -------------------
+    103                
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
@@ -566,7 +544,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "left_join_degraded_to_inner",
   "confidence": 0.9,
-  "explanation": "The query under review counts only 103 orders, which is inconsistent with the independent recomputation that found 1500 unique orders. The LEFT JOIN on the refunds table is incorrectly filtering out orders without refunds, leading to an inaccurate count of orders seen.",
+  "explanation": "The query under review counts only orders that have refunds, resulting in a total of 103 orders, while the independent recomputation shows there are 1500 total orders. The LEFT JOIN on the refunds table is incorrectly filtering out non-refunded orders due to the WHERE clause.",
   "corrected_sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id"
 }
 ```

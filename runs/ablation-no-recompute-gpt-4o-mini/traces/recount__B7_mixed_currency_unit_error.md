@@ -1,6 +1,6 @@
 # Trajectory — recount — B7_mixed_currency_unit_error
 
-`1` model calls (`1` replayed from cassette) · `2` tool calls · `1080` tokens · `$0.00022`
+`1` model calls (`0` replayed from cassette) · `2` tool calls · `1071` tokens · `$0.00022`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -41,7 +41,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 944 in / 136 out · 0.00s
+`gpt-4o-mini` · live call · 944 in / 127 out · 1.62s
 
 **system**
 
@@ -175,7 +175,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "mixed_unit_aggregation",
   "confidence": 0.9,
-  "explanation": "The query aggregates payments from completed orders without filtering for the currency being 'IDR', which is necessary to answer the business question about Indonesian revenue. The orders table should be filtered to ensure only IDR-denominated orders are included in the revenue calculation.",
+  "explanation": "The query aggregates payments from the 'payments' table without filtering for the currency 'IDR' in the 'orders' table. This could lead to incorrect revenue calculations if there are payments in other currencies.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'"
 }
 ```

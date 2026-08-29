@@ -1,6 +1,6 @@
 # Trajectory — recount — B2_fanout_units_via_payments
 
-`3` model calls (`3` replayed from cassette) · `6` tool calls · `3401` tokens · `$0.00081`
+`3` model calls (`1` replayed from cassette) · `6` tool calls · `3394` tokens · `$0.00080`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -34,7 +34,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 581 in / 67 out · 0.00s
+`gpt-4o-mini` · replayed · 628 in / 71 out · 0.00s
 
 **system**
 
@@ -120,6 +120,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 units_sold
 
@@ -131,7 +135,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of order items from completed orders, ensuring we only count units sold from orders that have been finalized."}
+{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of items sold from order_items where the corresponding orders have a status of 'completed', ensuring we only count completed orders."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -152,7 +156,7 @@ units_sold
 
 ## 6. model · plan
 
-`gpt-4o-mini` · replayed · 820 in / 458 out · 0.00s
+`gpt-4o-mini` · live call · 820 in / 463 out · 4.88s
 
 **system**
 
@@ -277,26 +281,26 @@ out, do not propose a fan-out hypothesis about it.
     {
       "risk": "The join between orders and payments may include orders that are not completed due to the absence of a filter on the payments table.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status != 'completed'",
-      "settles": "A non-zero count would confirm this issue, while a count of zero would rule it out."
+      "probe_sql": "SELECT COUNT(*) FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status != 'completed'",
+      "settles": "If this query returns a significant number of rows, it indicates that there are payments associated with non-completed orders. If it returns zero, this risk is ruled out."
     },
     {
       "risk": "The join between orders and order_items may include orders that are not completed due to the absence of a filter on the order_items table.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status != 'completed'",
-      "settles": "A non-zero count would confirm this issue, while a count of zero would rule it out."
+      "probe_sql": "SELECT COUNT(*) FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status != 'completed'",
+      "settles": "If this query returns a significant number of rows, it indicates that there are order items associated with non-completed orders. If it returns zero, this risk is ruled out."
     },
     {
-      "risk": "The query may be affected by orders that have been refunded, leading to an overestimation of units sold.",
-      "bug_type": "other",
-      "probe_sql": "SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.refund_id IS NULL",
-      "settles": "If this sum is less than 3648, it would confirm the issue; if it matches or exceeds, it would rule it out."
+      "risk": "The query may be affected by null values in the quantity column of the order_items table.",
+      "bug_type": "null_swallowing_predicate",
+      "probe_sql": "SELECT COUNT(*) FROM order_items WHERE quantity IS NULL",
+      "settles": "If this query returns a non-zero count, it indicates that there are order items with null quantities, which would affect the sum. If it returns zero, this risk is ruled out."
     },
     {
-      "risk": "The query may not account for orders with multiple payments, leading to inflated unit counts due to duplicate joins.",
+      "risk": "The aggregation may be incorrect due to the presence of duplicate order_items for the same order.",
       "bug_type": "fanout_join",
-      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If this count is less than the count of units sold divided by the average number of items per order, it would confirm the issue; if it matches or exceeds, it would rule it out."
+      "probe_sql": "SELECT COUNT(DISTINCT oi.order_id) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'",
+      "settles": "If this query returns a count of distinct order_ids that is less than the total count of order_items, it indicates that there are duplicates affecting the aggregation. If the counts match, this risk is ruled out."
     }
   ]
 }
@@ -307,7 +311,7 @@ out, do not propose a fan-out hypothesis about it.
 **request**
 
 ```sql
-SELECT COUNT(*) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status != 'completed'
+SELECT COUNT(*) FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status != 'completed'
 ```
 
 **response**
@@ -323,7 +327,7 @@ COUNT(*)
 **request**
 
 ```sql
-SELECT COUNT(*) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status != 'completed'
+SELECT COUNT(*) FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status != 'completed'
 ```
 
 **response**
@@ -339,15 +343,15 @@ COUNT(*)
 **request**
 
 ```sql
-SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.refund_id IS NULL
+SELECT COUNT(*) FROM order_items WHERE quantity IS NULL
 ```
 
 **response**
 
 ```
-SUM(oi.quantity)
-----------------
-2945            
+COUNT(*)
+--------
+0       
 ```
 
 ## 10. tool · `run_sql` · probe_4 · ok
@@ -355,20 +359,20 @@ SUM(oi.quantity)
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT o.order_id) FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
+SELECT COUNT(DISTINCT oi.order_id) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'
 ```
 
 **response**
 
 ```
-COUNT(DISTINCT o.order_id)
---------------------------
-1018                      
+COUNT(DISTINCT oi.order_id)
+---------------------------
+1018                       
 ```
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1342 in / 133 out · 0.00s
+`gpt-4o-mini` · live call · 1296 in / 116 out · 1.40s
 
 **system**
 
@@ -460,32 +464,32 @@ CREATE TABLE sessions (
 
 Probes you designed, and what executing them actually returned:
 [1] risk: The join between orders and payments may include orders that are not completed due to the absence of a filter on the payments table.
-    probe: SELECT COUNT(*) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status != 'completed'
+    probe: SELECT COUNT(*) FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status != 'completed'
     returned:
     COUNT(*)
     --------
     327     
 
 [2] risk: The join between orders and order_items may include orders that are not completed due to the absence of a filter on the order_items table.
-    probe: SELECT COUNT(*) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status != 'completed'
+    probe: SELECT COUNT(*) FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status != 'completed'
     returned:
     COUNT(*)
     --------
     907     
 
-[3] risk: The query may be affected by orders that have been refunded, leading to an overestimation of units sold.
-    probe: SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.refund_id IS NULL
+[3] risk: The query may be affected by null values in the quantity column of the order_items table.
+    probe: SELECT COUNT(*) FROM order_items WHERE quantity IS NULL
     returned:
-    SUM(oi.quantity)
-    ----------------
-    2945            
+    COUNT(*)
+    --------
+    0       
 
-[4] risk: The query may not account for orders with multiple payments, leading to inflated unit counts due to duplicate joins.
-    probe: SELECT COUNT(DISTINCT o.order_id) FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
+[4] risk: The aggregation may be incorrect due to the presence of duplicate order_items for the same order.
+    probe: SELECT COUNT(DISTINCT oi.order_id) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'
     returned:
-    COUNT(DISTINCT o.order_id)
-    --------------------------
-    1018                      
+    COUNT(DISTINCT oi.order_id)
+    ---------------------------
+    1018                       
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
@@ -540,8 +544,8 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query under review includes orders that are not completed due to the join with the payments table, which returned 327 non-completed orders. Additionally, the independent recomputation returned a different total (2993) compared to the original query (3648), indicating an overestimation of units sold.",
-  "corrected_sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'"
+  "explanation": "The query under review includes orders that are not completed due to the join with the payments table, which does not filter for completed orders. The independent recomputation returned a different total, indicating that the aggregation is incorrect.",
+  "corrected_sql": "SELECT SUM(oi.quantity) AS units_sold FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```
 

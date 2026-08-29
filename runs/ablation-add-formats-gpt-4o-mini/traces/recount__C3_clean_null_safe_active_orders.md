@@ -1,6 +1,6 @@
 # Trajectory — recount — C3_clean_null_safe_active_orders
 
-`2` model calls (`2` replayed from cassette) · `3` tool calls · `1789` tokens · `$0.00033`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1844` tokens · `$0.00034`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -50,7 +50,7 @@ Write literals in exactly this format. A differently formatted string compares a
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 656 in / 58 out · 0.00s
+`gpt-4o-mini` · live call · 703 in / 58 out · 1.19s
 
 **system**
 
@@ -142,6 +142,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 active_orders
 
@@ -178,7 +182,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 990 in / 85 out · 0.00s
+`gpt-4o-mini` · replayed · 990 in / 93 out · 0.00s
 
 **system**
 
@@ -321,8 +325,8 @@ actually lives at that finer grain.
 {
   "verdict": "CLEAN",
   "bug_type": null,
-  "confidence": 1,
-  "explanation": "The query correctly counts the number of orders that are not cancelled by using the COALESCE function to treat unset statuses as not cancelled. Both the query under review and the independent recomputation returned the same result from the orders table.",
+  "confidence": 1.0,
+  "explanation": "The query correctly counts the number of orders that are not cancelled by using the COALESCE function to treat unset statuses as not cancelled. Both the query under review and the independent recomputation returned the same result of 1357 active orders from the orders table.",
   "corrected_sql": null
 }
 ```

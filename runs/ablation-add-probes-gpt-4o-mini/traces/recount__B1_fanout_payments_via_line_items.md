@@ -1,6 +1,6 @@
 # Trajectory — recount — B1_fanout_payments_via_line_items
 
-`3` model calls (`3` replayed from cassette) · `6` tool calls · `3404` tokens · `$0.00081`
+`3` model calls (`1` replayed from cassette) · `6` tool calls · `3490` tokens · `$0.00083`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -34,7 +34,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 585 in / 69 out · 0.00s
+`gpt-4o-mini` · replayed · 632 in / 69 out · 0.00s
 
 **system**
 
@@ -120,6 +120,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 captured_cents
 
@@ -152,7 +156,7 @@ captured_cents
 
 ## 6. model · plan
 
-`gpt-4o-mini` · replayed · 827 in / 459 out · 0.00s
+`gpt-4o-mini` · live call · 827 in / 458 out · 3.60s
 
 **system**
 
@@ -278,25 +282,25 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "Payments may include amounts for orders that are not completed",
       "bug_type": "missing_filter",
       "probe_sql": "SELECT SUM(p.amount_cents) AS total_payments FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status != 'completed'",
-      "settles": "If this query returns a non-zero total, it confirms that there are payments associated with non-completed orders. If it returns zero, this risk is ruled out."
+      "settles": "If the result is greater than 0, it confirms that there are payments for non-completed orders. If the result is 0, it rules this out."
     },
     {
       "risk": "Refunds may not be accounted for in the captured amount",
       "bug_type": "other",
       "probe_sql": "SELECT SUM(r.amount_cents) AS total_refunds FROM refunds r JOIN orders o ON r.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If this query returns a non-zero total, it indicates that refunds are present for completed orders, which should be subtracted from the captured amount. If it returns zero, this risk is ruled out."
+      "settles": "If the result is greater than 0, it confirms that refunds exist for completed orders and are not deducted from the captured amount. If the result is 0, it rules this out."
     },
     {
-      "risk": "Payments may be duplicated due to multiple order items per order",
+      "risk": "Payments may be duplicated due to multiple entries for the same order",
       "bug_type": "fanout_join",
-      "probe_sql": "SELECT COUNT(DISTINCT p.order_id) AS unique_payments, COUNT(DISTINCT o.order_id) AS unique_orders FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If the count of unique payments is greater than the count of unique orders, it confirms that payments are being duplicated due to the join with order items. If they are equal, this risk is ruled out."
+      "probe_sql": "SELECT COUNT(DISTINCT p.order_id) AS unique_orders, COUNT(p.payment_id) AS total_payments FROM payments p",
+      "settles": "If unique_orders is less than total_payments, it confirms that there are duplicate payments for the same order. If they are equal, it rules this out."
     },
     {
-      "risk": "Payments may include amounts in different currencies without conversion",
-      "bug_type": "mixed_unit_aggregation",
-      "probe_sql": "SELECT DISTINCT currency FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status = 'completed'",
-      "settles": "If this query returns more than one currency, it indicates that payments are being aggregated without proper conversion. If it returns only one currency, this risk is ruled out."
+      "risk": "The join between orders and payments may not capture all completed orders due to missing payment records",
+      "bug_type": "left_join_degraded_to_inner",
+      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT p.order_id) AS paid_orders FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'",
+      "settles": "If completed_orders is greater than paid_orders, it confirms that there are completed orders without corresponding payments. If they are equal, it rules this out."
     }
   ]
 }
@@ -339,15 +343,15 @@ total_refunds
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT p.order_id) AS unique_payments, COUNT(DISTINCT o.order_id) AS unique_orders FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'
+SELECT COUNT(DISTINCT p.order_id) AS unique_orders, COUNT(p.payment_id) AS total_payments FROM payments p
 ```
 
 **response**
 
 ```
-unique_payments | unique_orders
-----------------+--------------
-1018            | 1018         
+unique_orders | total_payments
+--------------+---------------
+1357          | 1683          
 ```
 
 ## 10. tool · `run_sql` · probe_4 · ok
@@ -355,21 +359,20 @@ unique_payments | unique_orders
 **request**
 
 ```sql
-SELECT DISTINCT currency FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status = 'completed'
+SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT p.order_id) AS paid_orders FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
 ```
 
 **response**
 
 ```
-currency
---------
-IDR     
-USD     
+completed_orders | paid_orders
+-----------------+------------
+1018             | 1018       
 ```
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1323 in / 141 out · 0.00s
+`gpt-4o-mini` · live call · 1344 in / 160 out · 1.92s
 
 **system**
 
@@ -474,20 +477,19 @@ Probes you designed, and what executing them actually returned:
     -------------
     47607500     
 
-[3] risk: Payments may be duplicated due to multiple order items per order
-    probe: SELECT COUNT(DISTINCT p.order_id) AS unique_payments, COUNT(DISTINCT o.order_id) AS unique_orders FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'
+[3] risk: Payments may be duplicated due to multiple entries for the same order
+    probe: SELECT COUNT(DISTINCT p.order_id) AS unique_orders, COUNT(p.payment_id) AS total_payments FROM payments p
     returned:
-    unique_payments | unique_orders
-    ----------------+--------------
-    1018            | 1018         
+    unique_orders | total_payments
+    --------------+---------------
+    1357          | 1683          
 
-[4] risk: Payments may include amounts in different currencies without conversion
-    probe: SELECT DISTINCT currency FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status = 'completed'
+[4] risk: The join between orders and payments may not capture all completed orders due to missing payment records
+    probe: SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT p.order_id) AS paid_orders FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
     returned:
-    currency
-    --------
-    IDR     
-    USD     
+    completed_orders | paid_orders
+    -----------------+------------
+    1018             | 1018       
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
@@ -542,12 +544,16 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "wrong_aggregation_grain",
   "confidence": 0.9,
-  "explanation": "The query aggregates payments at the order item level, which can lead to overcounting when multiple items exist per order. The independent recomputation shows a significantly lower total, indicating that the aggregation is incorrect. The payments table should be joined to the orders table without the order items to accurately reflect the total captured from completed orders.",
-  "corrected_sql": "SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'"
+  "explanation": "The query under review aggregates payments from the payments table without accounting for refunds from the refunds table, leading to an inflated total. The independent recomputation returned a significantly lower amount, indicating a discrepancy in the captured amount due to missing refund considerations.",
+  "corrected_sql": "SELECT SUM(p.amount_cents) - COALESCE((SELECT SUM(r.amount_cents) FROM refunds r JOIN orders o ON r.order_id = o.order_id WHERE o.status = 'completed'), 0) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```
 
-## 12. gate · verification_gate
+## 12. note · correction
+
+The reviewer's correction and the independent derivation disagree on the corrected value; both are reported.
+
+## 13. gate · verification_gate
 
 **BUG** — an independently derived query returns a different number, demonstrating the discrepancy
 

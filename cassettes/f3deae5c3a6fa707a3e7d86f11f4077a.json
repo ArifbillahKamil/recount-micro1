@@ -1,0 +1,60 @@
+{
+  "cassette_key": "f3deae5c3a6fa707a3e7d86f11f4077a",
+  "step": "probe_repair",
+  "recorded_at": "2026-08-29T02:16:57Z",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a senior analytics engineer who has been burned by\nqueries that run cleanly and return the wrong number. You do not speculate: you\ndesign a measurement that would settle each suspicion."
+      },
+      {
+        "role": "user",
+        "content": "Some probes failed to execute. Rewrite only those, keeping\nthe same intent. This database is SQLite.\n\n[1] intent: The order timestamps are not being correctly interpreted in the Asia/Jakarta timezone, leading to incorrect date filtering.\n    sql: SELECT COUNT(*) AS orders_on_day_jakarta FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'\n    error: \"'localtime'\" makes the result depend on the machine running the query, so it cannot be reproduced. Use an explicit offset such as date(col, '+7 hours') instead of 'localtime', and a literal date instead of 'now'.\n\nReply with one JSON object and nothing else:\n\n{\"probes\": [{\"index\": <original index>, \"probe_sql\": \"a single SELECT\"}]}"
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 900,
+    "seed": 7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-EI2v7mGzWuBLrPMxPFp7jA3Q2pmyv",
+    "object": "chat.completion",
+    "created": 1787969837,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\"probes\": [{\"index\": 1, \"probe_sql\": \"SELECT COUNT(*) AS orders_on_day_jakarta FROM orders WHERE date(order_ts, '+7 hours') = '2026-01-31'\"}]}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 211,
+      "completion_tokens": 46,
+      "total_tokens": 257,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "service_tier": "default",
+    "system_fingerprint": "fp_8156e398b1"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "cassette_key": "a45017a511ae6ba1330de9ee43121114",
+  "step": "recompute",
+  "recorded_at": "2026-08-29T02:16:05Z",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a senior analytics engineer. You are handed a\nbusiness question and the measured facts about a warehouse, and you write the\nquery that answers it. You are not reviewing anyone's work: you are deriving the\nanswer independently."
+      },
+      {
+        "role": "user",
+        "content": "Business question:\nHow many orders were placed during January 2026, in UTC?\n\nMEASURED COLUMN FACTS\n\norders: 1500 rows, one row per order_id\n  order_id: INTEGER, pk, 1500 distinct\n  customer_id: INTEGER, 389 distinct\n  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'\n  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct\n  currency: TEXT, 2 distinct\n\nMatch the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.\n\nWrite a single read-only SQL query that answers this question against this\nSQLite warehouse.\n\nDerive it from the question and the measured facts above. Pay attention to the\ngrain of each measure, to columns that are nullable in practice, and to the\nstored format of any value you compare against.\n\nThe result must not depend on where or when the query runs. Do not use\n'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as\ndate(col, '+7 hours') and literal dates.\n\nReturn exactly these columns, in this order, with these names:\njanuary_orders\n\nReply with one JSON object and nothing else:\n\n{\"sql\": \"a single SELECT, no semicolon\", \"reasoning\": \"one sentence on the grain and filters you chose\"}"
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 1200,
+    "seed": 7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-EI2uGXYbMoCtN8awzgdNfaC68gaPS",
+    "object": "chat.completion",
+    "created": 1787969784,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\"sql\": \"SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL\", \"reasoning\": \"I counted the distinct order_ids for January 2026, ensuring to filter out any NULL statuses and using the correct date format for the UTC timezone.\"}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 401,
+      "completion_tokens": 92,
+      "total_tokens": 493,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "service_tier": "default",
+    "system_fingerprint": "fp_14f4ce979a"
+  }
+}

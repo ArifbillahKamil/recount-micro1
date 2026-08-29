@@ -1,6 +1,6 @@
 # Trajectory — recount — C4_clean_half_open_date_range
 
-`2` model calls (`2` replayed from cassette) · `2` tool calls · `1821` tokens · `$0.00037`
+`2` model calls (`2` replayed from cassette) · `2` tool calls · `1878` tokens · `$0.00038`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -32,7 +32,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 580 in / 83 out · 0.00s
+`gpt-4o-mini` · replayed · 627 in / 83 out · 0.00s
 
 **system**
 
@@ -118,6 +118,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 january_orders
 
@@ -154,7 +158,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1022 in / 136 out · 0.00s
+`gpt-4o-mini` · replayed · 1022 in / 146 out · 0.00s
 
 **system**
 
@@ -296,9 +300,9 @@ actually lives at that finer grain.
 ```json
 {
   "verdict": "BUG",
-  "bug_type": "date_range_truncation",
+  "bug_type": "timezone_day_boundary",
   "confidence": 0.9,
-  "explanation": "The query under review uses a date range that does not include the full UTC timestamps for January 2026, which may lead to missing orders. The independent recomputation returned a different count, indicating a discrepancy in the date filtering.",
+  "explanation": "The query under review uses a date range that does not account for the UTC timezone properly, which may lead to missing orders that fall on the boundary of the specified dates. The independent recomputation returned a different count, indicating that the original query may have excluded some orders due to this issue.",
   "corrected_sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'"
 }
 ```

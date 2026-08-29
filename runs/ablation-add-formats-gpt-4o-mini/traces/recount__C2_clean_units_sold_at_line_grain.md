@@ -1,6 +1,6 @@
 # Trajectory — recount — C2_clean_units_sold_at_line_grain
 
-`2` model calls (`2` replayed from cassette) · `3` tool calls · `1808` tokens · `$0.00034`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1862` tokens · `$0.00035`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -52,7 +52,7 @@ Write literals in exactly this format. A differently formatted string compares a
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 650 in / 65 out · 0.00s
+`gpt-4o-mini` · live call · 697 in / 69 out · 1.24s
 
 **system**
 
@@ -144,6 +144,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 units_sold
 
@@ -155,7 +159,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(order_items.quantity) AS units_sold FROM order_items JOIN orders ON order_items.order_id = orders.order_id WHERE orders.status = 'completed'", "reasoning": "I summed the quantity of order items for orders that have a status of 'completed' to get the total units sold."}
+{"sql": "SELECT SUM(order_items.quantity) AS units_sold FROM orders JOIN order_items ON orders.order_id = order_items.order_id WHERE orders.status = 'completed'", "reasoning": "The query sums the quantity of order items for orders that have a status of 'completed', ensuring we only count units sold from finalized transactions."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -163,7 +167,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT SUM(order_items.quantity) AS units_sold FROM order_items JOIN orders ON order_items.order_id = orders.order_id WHERE orders.status = 'completed'
+SELECT SUM(order_items.quantity) AS units_sold FROM orders JOIN order_items ON orders.order_id = order_items.order_id WHERE orders.status = 'completed'
 ```
 
 **response**
@@ -180,7 +184,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1005 in / 88 out · 0.00s
+`gpt-4o-mini` · live call · 1005 in / 91 out · 1.27s
 
 **system**
 
@@ -274,7 +278,7 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT SUM(order_items.quantity) AS units_sold FROM order_items JOIN orders ON order_items.order_id = orders.order_id WHERE orders.status = 'completed'
+  sql: SELECT SUM(order_items.quantity) AS units_sold FROM orders JOIN order_items ON orders.order_id = order_items.order_id WHERE orders.status = 'completed'
   returned:
     units_sold
     ----------
@@ -325,7 +329,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "Both the query under review and the independent recomputation return the same result of 2993 units sold across completed orders. The joins between the 'orders' and 'order_items' tables are appropriate for calculating the total quantity sold for completed orders.",
+  "explanation": "The query correctly sums the quantity of order items from completed orders, matching the business question. Both the query under review and the independent recomputation returned the same result of 2993 units sold. The tables involved are 'orders' and 'order_items'.",
   "corrected_sql": null
 }
 ```

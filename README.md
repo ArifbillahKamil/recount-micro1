@@ -271,10 +271,10 @@ Recorded with `gpt-4o-mini` on the 12 bundled cases. Both systems received the s
 | F1 | 93% | 94% | +1 pt |
 | Precision | 100% | 89% | -11 pt |
 | False alarms on the 4 correct queries (lower is better) | 0/4 | 1/4 | +25 pt |
-| Repair accuracy | 7/8 | 6/8 | -12 pt |
-| Bug type named correctly | 29% | 38% | +9 pt |
-| Cost per case | $0.00019 | $0.00036 | x1.9 |
-| Wall clock per case | _replayed from cassettes; not a live measurement_ | | |
+| Repair accuracy | 6/8 | 6/8 | +0 pt |
+| Bug type named correctly | 43% | 25% | -18 pt |
+| Cost per case | $0.00019 | $0.00037 | x2.0 |
+| Wall clock per case | 1.8s | 2.9s | - |
 | Model calls / tool calls | 12 / 0 | 24 / 24 | - |
 
 ### Reading this honestly
@@ -283,7 +283,7 @@ Recorded with `gpt-4o-mini` on the 12 bundled cases. Both systems received the s
 
 **The F1 difference is not.** 93% against 94% is a gap of 1 point on 12 cases, where a single case moves F1 by roughly 8 points and the false alarm rate by 25. It is inside the noise of this sample and is reported rather than leaned on. Twelve cases can show that a mechanism works; they cannot rank two systems that are close.
 
-**Cost is a real trade.** Recount costs x1.9 the baseline and is slower in wall clock, since it makes two model calls and executes queries where the baseline makes one call and reads. At $0.00036 per verified metric that is worth paying, but it is a cost, not a rounding error to hide.
+**Cost is a real trade.** Recount costs x2.0 the baseline and takes about x1.6 the wall clock. At $0.00037 per verified metric that is worth paying, but it is a cost, not a rounding error to hide.
 
 Full per-case tables, including every explanation, are in [`runs/main-gpt-4o-mini/results.md`](runs/main-gpt-4o-mini/results.md). Trajectories for all 24 runs are in [`runs/main-gpt-4o-mini/traces/`](runs/main-gpt-4o-mini/traces/) -- see [TRAJECTORIES.md](TRAJECTORIES.md).
 <!-- RESULTS:END -->
@@ -299,12 +299,12 @@ Each row is a real run. The evidence column is generated from `runs/*/results.js
 
 | stage | what was tried and why | evidence | decision / learning |
 |---|---|---|---|
-| **Baseline** | One prompt: schema, question, SQL. The reasonable first attempt, and a strong one. | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00019/case | Starting point. Note it already scores well -- a 2026 model is good at this task. |
+| **Baseline** | One prompt: schema, question, SQL. The reasonable first attempt, and a strong one. | F1 93%, recall 88%, 0/4 false alarms, 6/8 repairs, $0.00019/case | Starting point. Note it already scores well -- a 2026 model is good at this task. |
 | **Iteration 1**<br>profiler + probes + gate | The original design. Measure the warehouse, let the agent write and run diagnostic probes, then require a bug claim to ship a correction whose effect is checked. | F1 75%, recall 75%, 2/4 false alarms, 6/8 repairs, $0.00063/case (`80020a6`, `runs/ablation-no-recompute-…`) | **Lost to the baseline by 18 points.** Kept the components, questioned the architecture. |
 | **Iteration 2**<br>independent recomputation | The gate could only ever downgrade a bug claim, so it was structurally unable to catch a real fault waved through -- and B1 and B4 were. Added a stage that answers the question from scratch, without seeing the query under review, then compares the two numbers. | F1 89%, recall 100%, 2/4 false alarms, 8/8 repairs, $0.00076/case (`80020a6`, `runs/main-…`) | **Kept.** Recall 75% -> 100%. This is the one change that worked. |
 | **Iteration 3**<br>profile split by role | Ablations showed the profiler was hurting. The hypothesis was that reviewers need join cardinality while authors need types and formats, so the digest was split. | F1 84%, recall 100%, 3/4 false alarms, 5/8 repairs, $0.00077/case (`2666905`, `runs/main-…`) | **Removed.** It got worse. The trace showed the author writing `WHERE status IS NOT NULL` where the question required `WHERE status = 'completed'` -- the NULL warning displaced the required filter instead of adding to it. |
-| **Iteration 4**<br>stored value formats, no hazard framing | If naming a hazard makes an author defend against it, give it no hazards — only how values are stored. This was aimed at the one remaining false alarm, where the author compared against `'2026-01-01T00:00:00Z'` on values stored `'2026-01-01 02:11:00'`. | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00037/case | **Removed.** It did fix that false alarm, and cost a detection doing it: recall fell 100% -> 88%, leaving the system identical to the baseline on every metric. A fix that trades a caught fault for a quieter report is not a fix. |
-| **Final**<br>recomputation + gate | Everything that could not be shown to help was deleted: the warehouse profiler, the probe loop, the format hints. What remains is the query under review, an independent derivation of the same question, and a comparison of the two numbers. | F1 94%, recall 100%, 1/4 false alarms, 6/8 repairs, $0.00036/case | **Reported configuration.** Three of the four stages I designed were removed by their own measurements. |
+| **Iteration 4**<br>stored value formats, no hazard framing | If naming a hazard makes an author defend against it, give it no hazards — only how values are stored. This was aimed at the one remaining false alarm, where the author compared against `'2026-01-01T00:00:00Z'` on values stored `'2026-01-01 02:11:00'`. | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00038/case | **Removed.** It did fix that false alarm, and cost a detection doing it: recall fell 100% -> 88%, leaving the system identical to the baseline on every metric. A fix that trades a caught fault for a quieter report is not a fix. |
+| **Final**<br>recomputation + gate | Everything that could not be shown to help was deleted: the warehouse profiler, the probe loop, the format hints. What remains is the query under review, an independent derivation of the same question, and a comparison of the two numbers. | F1 94%, recall 100%, 1/4 false alarms, 6/8 repairs, $0.00037/case | **Reported configuration.** Three of the four stages I designed were removed by their own measurements. |
 
 ### What each component is worth
 
@@ -312,11 +312,11 @@ Measured against the reported configuration, on the same cases and the same mode
 
 | variant | what it changes | result |
 |---|---|---|
-| `--no-recompute` | Remove the recomputation — the only stage that earned its place | F1 67%, recall 50%, 0/4 false alarms, 4/8 repairs, $0.00021/case |
-| `--no-gate` | Accept the model verdict as-is — what the gate is worth once recomputation exists | F1 94%, recall 100%, 1/4 false alarms, 6/8 repairs, $0.00036/case |
-| `--add-formats` | Restore the stored-value-format hints — why they were removed | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00037/case |
-| `--add-profile` | Restore the warehouse profiler — why it was removed | F1 84%, recall 100%, 3/4 false alarms, 4/8 repairs, $0.00033/case |
-| `--add-probes` | Restore the probe loop — why it was removed | F1 94%, recall 100%, 1/4 false alarms, 6/8 repairs, $0.00081/case |
+| `--no-recompute` | Remove the recomputation — the only stage that earned its place | F1 55%, recall 38%, 0/4 false alarms, 3/8 repairs, $0.00021/case |
+| `--no-gate` | Accept the model verdict as-is — what the gate is worth once recomputation exists | F1 94%, recall 100%, 1/4 false alarms, 6/8 repairs, $0.00037/case |
+| `--add-formats` | Restore the stored-value-format hints — why they were removed | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00038/case |
+| `--add-profile` | Restore the warehouse profiler — why it was removed | F1 84%, recall 100%, 3/4 false alarms, 5/8 repairs, $0.00034/case |
+| `--add-probes` | Restore the probe loop — why it was removed | F1 94%, recall 100%, 1/4 false alarms, 4/8 repairs, $0.00081/case |
 
 ### On the gate, which has no measured contribution
 

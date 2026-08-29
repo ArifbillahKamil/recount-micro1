@@ -1,6 +1,6 @@
 # Trajectory — recount — B7_mixed_currency_unit_error
 
-`2` model calls (`2` replayed from cassette) · `2` tool calls · `1862` tokens · `$0.00038`
+`2` model calls (`2` replayed from cassette) · `2` tool calls · `1900` tokens · `$0.00038`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -33,7 +33,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 592 in / 75 out · 0.00s
+`gpt-4o-mini` · replayed · 639 in / 76 out · 0.00s
 
 **system**
 
@@ -119,6 +119,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 idr_revenue_cents
 
@@ -130,7 +134,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'", "reasoning": "The query sums the payment amounts for completed orders in IDR currency, ensuring we capture only the relevant revenue."}
+{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'", "reasoning": "I summed the payment amounts for orders in IDR currency that have a completed status to calculate the total captured revenue."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -138,7 +142,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
+SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
 ```
 
 **response**
@@ -155,7 +159,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1051 in / 144 out · 0.00s
+`gpt-4o-mini` · replayed · 1051 in / 134 out · 0.00s
 
 **system**
 
@@ -249,7 +253,7 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
+  sql: SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
   returned:
     idr_revenue_cents
     -----------------
@@ -298,10 +302,10 @@ actually lives at that finer grain.
 ```json
 {
   "verdict": "BUG",
-  "bug_type": "missing_filter",
+  "bug_type": "wrong_aggregation_grain",
   "confidence": 0.9,
-  "explanation": "The query under review does not filter for orders with currency 'IDR', which is necessary to accurately calculate the total captured revenue in IDR. The independent recomputation correctly includes this filter, resulting in a different total revenue amount. The discrepancy indicates that the query is not aligned with the business question.",
-  "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'"
+  "explanation": "The query under review aggregates payments based on completed orders without filtering for the currency, which leads to an inflated revenue figure. The independent recomputation correctly filters for 'IDR' currency, resulting in a lower and more accurate revenue total.",
+  "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'"
 }
 ```
 

@@ -1,6 +1,6 @@
 # Trajectory — recount — B2_fanout_units_via_payments
 
-`1` model calls (`1` replayed from cassette) · `1` tool calls · `1048` tokens · `$0.00020`
+`1` model calls (`0` replayed from cassette) · `1` tool calls · `1039` tokens · `$0.00020`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -42,7 +42,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 943 in / 105 out · 0.00s
+`gpt-4o-mini` · live call · 943 in / 96 out · 1.42s
 
 **system**
 
@@ -177,7 +177,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 0.9,
-  "explanation": "The SQL query correctly sums the quantity of order items from completed orders by joining the orders, order_items, and payments tables. The condition on the order status ensures that only completed orders are considered, which aligns with the business question. The absence of probes and independent recomputation slightly lowers confidence, but the logic appears sound.",
+  "explanation": "The SQL query correctly sums the quantity of order items from completed orders by joining the orders and order_items tables. The inclusion of the payments table does not affect the aggregation since it only filters for completed orders. The result of 3648 units sold aligns with the business question.",
   "corrected_sql": null
 }
 ```

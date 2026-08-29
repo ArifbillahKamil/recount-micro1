@@ -1,6 +1,6 @@
 # Trajectory — recount — B6_timezone_day_misattribution
 
-`2` model calls (`2` replayed from cassette) · `2` tool calls · `1796` tokens · `$0.00035`
+`2` model calls (`2` replayed from cassette) · `2` tool calls · `1906` tokens · `$0.00039`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -32,7 +32,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 595 in / 68 out · 0.00s
+`gpt-4o-mini` · replayed · 642 in / 92 out · 0.00s
 
 **system**
 
@@ -118,6 +118,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 orders_on_day
 
@@ -129,7 +133,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE DATE(order_ts, 'localtime', '+7 hours') = '2026-01-31'", "reasoning": "The query counts the number of orders placed on 31 January 2026 by converting the order timestamp to the Asia/Jakarta timezone."}
+{"sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'", "reasoning": "The query counts the number of orders placed on 31 January 2026 by filtering the order timestamps in UTC that correspond to the local day in the Asia/Jakarta timezone."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -137,7 +141,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT COUNT(*) AS orders_on_day FROM orders WHERE DATE(order_ts, 'localtime', '+7 hours') = '2026-01-31'
+SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'
 ```
 
 **response**
@@ -145,7 +149,7 @@ SELECT COUNT(*) AS orders_on_day FROM orders WHERE DATE(order_ts, 'localtime', '
 ```
 orders_on_day
 -------------
-17           
+18           
 ```
 
 ## 6. note · probes_disabled
@@ -154,7 +158,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1015 in / 118 out · 0.00s
+`gpt-4o-mini` · replayed · 1031 in / 141 out · 0.00s
 
 **system**
 
@@ -247,11 +251,11 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT COUNT(*) AS orders_on_day FROM orders WHERE DATE(order_ts, 'localtime', '+7 hours') = '2026-01-31'
+  sql: SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'
   returned:
     orders_on_day
     -------------
-    17           
+    18           
 
   the query under review returned:
     orders_on_day
@@ -298,8 +302,8 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "timezone_day_boundary",
   "confidence": 0.9,
-  "explanation": "The query under review counts orders based on UTC timestamps without adjusting for the Asia/Jakarta timezone (UTC+7). The independent recomputation correctly accounts for the timezone, resulting in a different count of orders on the specified date.",
-  "corrected_sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE DATE(order_ts, 'localtime', '+7 hours') = '2026-01-31'"
+  "explanation": "The query under review counts orders based on the UTC date, while the business question requires counting orders based on the Asia/Jakarta timezone (UTC+7). This discrepancy leads to an incorrect count of orders for the specified local day.",
+  "corrected_sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31T00:00:00+07:00' AND order_ts < '2026-02-01T00:00:00+07:00'"
 }
 ```
 
@@ -310,6 +314,6 @@ actually lives at that finer grain.
 ```json
 {
   "reported": "orders_on_day\n-------------\n12           ",
-  "recomputed": "orders_on_day\n-------------\n17           "
+  "recomputed": "orders_on_day\n-------------\n18           "
 }
 ```

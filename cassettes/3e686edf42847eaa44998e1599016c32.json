@@ -1,7 +1,7 @@
 {
   "cassette_key": "3e686edf42847eaa44998e1599016c32",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:52:15Z",
+  "recorded_at": "2026-08-29T02:15:18Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2XBvK8iggItf2IjGYdJrPTZDaQk",
+    "id": "chatcmpl-EI2tUX4NiRvkju34qfjUH9S7ZEwGe",
     "object": "chat.completion",
-    "created": 1787968353,
+    "created": 1787969736,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"left_join_degraded_to_inner\",\n  \"confidence\": 0.8,\n  \"explanation\": \"The query uses a LEFT JOIN between orders and refunds, but the WHERE clause filters out any refunds with negative amounts, which effectively turns it into an INNER JOIN. This could lead to an undercount of orders if any orders have refunds that are not included due to this condition.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"left_join_degraded_to_inner\",\n  \"confidence\": 0.8,\n  \"explanation\": \"The query uses a LEFT JOIN between orders and refunds, but the WHERE clause filters out any refunds with negative amounts, which effectively turns it into an INNER JOIN. This could lead to an undercount of orders if any orders have refunds that are negative or if they have no refunds at all. The tables involved are 'orders' and 'refunds'.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 965,
-      "completion_tokens": 140,
-      "total_tokens": 1105,
+      "completion_tokens": 156,
+      "total_tokens": 1121,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

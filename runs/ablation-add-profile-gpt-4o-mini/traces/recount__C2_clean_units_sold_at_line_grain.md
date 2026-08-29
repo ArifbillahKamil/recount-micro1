@@ -1,6 +1,6 @@
 # Trajectory — recount — C2_clean_units_sold_at_line_grain
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1559` tokens · `$0.00031`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1606` tokens · `$0.00032`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -73,7 +73,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 421 in / 62 out · 1.27s
+`gpt-4o-mini` · live call · 468 in / 62 out · 1.10s
 
 **system**
 
@@ -115,6 +115,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 units_sold
 
@@ -151,7 +155,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 964 in / 112 out · 0.00s
+`gpt-4o-mini` · live call · 964 in / 112 out · 1.43s
 
 **system**
 

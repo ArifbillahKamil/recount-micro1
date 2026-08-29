@@ -1,6 +1,6 @@
 # Trajectory — recount — C2_clean_units_sold_at_line_grain
 
-`1` model calls (`1` replayed from cassette) · `1` tool calls · `1035` tokens · `$0.00021`
+`1` model calls (`0` replayed from cassette) · `1` tool calls · `1023` tokens · `$0.00020`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -41,7 +41,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 922 in / 113 out · 0.00s
+`gpt-4o-mini` · live call · 922 in / 101 out · 1.33s
 
 **system**
 
@@ -174,8 +174,8 @@ actually lives at that finer grain.
 {
   "verdict": "CLEAN",
   "bug_type": null,
-  "confidence": 0.9,
-  "explanation": "The SQL query correctly sums the quantity of order items from the order_items table, filtered by completed orders in the orders table. The join between orders and order_items is appropriate as it aggregates the quantity at the order item level, which is necessary to answer the business question about total units sold. The result of 2993 units sold aligns with the intended metric.",
+  "confidence": 1,
+  "explanation": "The SQL query correctly sums the quantity of order items from the order_items table, filtered by completed orders in the orders table. The join between orders and order_items is appropriate as it aggregates the quantity at the correct grain of completed orders. The returned result of 2993 units sold aligns with the business question.",
   "corrected_sql": null
 }
 ```

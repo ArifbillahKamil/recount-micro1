@@ -1,6 +1,6 @@
 # Trajectory — recount — C3_clean_null_safe_active_orders
 
-`1` model calls (`1` replayed from cassette) · `1` tool calls · `1000` tokens · `$0.00019`
+`1` model calls (`0` replayed from cassette) · `1` tool calls · `1025` tokens · `$0.00020`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -40,7 +40,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 917 in / 83 out · 0.00s
+`gpt-4o-mini` · live call · 917 in / 108 out · 1.43s
 
 **system**
 
@@ -172,8 +172,8 @@ actually lives at that finer grain.
 {
   "verdict": "CLEAN",
   "bug_type": null,
-  "confidence": 1,
-  "explanation": "The SQL query correctly counts the number of orders that are not cancelled by using the COALESCE function to treat unset statuses as 'unknown'. This aligns with the business question regarding active orders in the 'orders' table.",
+  "confidence": 1.0,
+  "explanation": "The SQL query correctly counts the number of orders in the 'orders' table that are not cancelled, including those with an unset status. The use of COALESCE ensures that unset statuses are treated as not cancelled, aligning with the business question. The result of 1357 active orders is consistent with the intended logic of the query.",
   "corrected_sql": null
 }
 ```

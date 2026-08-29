@@ -1,7 +1,7 @@
 {
   "cassette_key": "d60ae3454276a11644fdebe2e68bf101",
   "step": "baseline_review",
-  "recorded_at": "2026-08-29T01:51:17Z",
+  "recorded_at": "2026-08-29T02:14:20Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2WGrGC5M5TBIh4g2CvScOf6QDTQ",
+    "id": "chatcmpl-EI2sZXPKwzmNn239NtYGAUdc96SDX",
     "object": "chat.completion",
-    "created": 1787968296,
+    "created": 1787969679,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.8,\n  \"explanation\": \"The query counts all orders where the status is not 'cancelled', but it does not account for orders that have no status at all, which are considered live business. The orders table should include a condition to check for NULL statuses to accurately reflect active orders.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.8,\n  \"explanation\": \"The query counts all orders where the status is not 'cancelled', but it does not account for orders that have no status at all, which are considered live business. The orders table should include a condition to check for NULL status as well.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 777,
-      "completion_tokens": 112,
-      "total_tokens": 889,
+      "completion_tokens": 109,
+      "total_tokens": 886,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

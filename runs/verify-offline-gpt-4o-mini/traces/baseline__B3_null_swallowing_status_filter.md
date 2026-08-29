@@ -1,6 +1,6 @@
 # Trajectory — baseline — B3_null_swallowing_status_filter
 
-`1` model calls (`1` replayed from cassette) · `0` tool calls · `889` tokens · `$0.00018`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `886` tokens · `$0.00018`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · replayed · 777 in / 112 out · 0.00s
+`gpt-4o-mini` · replayed · 777 in / 109 out · 0.00s
 
 **system**
 
@@ -129,14 +129,14 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.8,
-  "explanation": "The query counts all orders where the status is not 'cancelled', but it does not account for orders that have no status at all, which are considered live business. The orders table should include a condition to check for NULL statuses to accurately reflect active orders.",
+  "explanation": "The query counts all orders where the status is not 'cancelled', but it does not account for orders that have no status at all, which are considered live business. The orders table should include a condition to check for NULL status as well.",
   "corrected_sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'"
 }
 ```
 
 ## 3. gate · final
 
-**BUG** — The query counts all orders where the status is not 'cancelled', but it does not account for orders that have no status at all, which are considered live business. The orders table should include a condition to check for NULL statuses to accurately reflect active orders.
+**BUG** — The query counts all orders where the status is not 'cancelled', but it does not account for orders that have no status at all, which are considered live business. The orders table should include a condition to check for NULL status as well.
 
 ```json
 {

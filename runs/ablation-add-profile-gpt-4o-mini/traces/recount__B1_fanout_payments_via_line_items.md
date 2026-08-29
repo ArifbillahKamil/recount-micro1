@@ -1,6 +1,6 @@
 # Trajectory — recount — B1_fanout_payments_via_line_items
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1813` tokens · `$0.00036`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1860` tokens · `$0.00036`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -82,7 +82,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 529 in / 66 out · 1.71s
+`gpt-4o-mini` · live call · 576 in / 63 out · 1.29s
 
 **system**
 
@@ -131,6 +131,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 captured_cents
 
@@ -142,7 +146,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status IS NOT NULL", "reasoning": "This query sums the amount captured from payments for orders that have a non-null status, ensuring we only consider completed orders."}
+{"sql": "SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status IS NOT NULL", "reasoning": "I summed the payment amounts for orders that have a non-null status to ensure we only capture completed orders."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -167,7 +171,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1097 in / 121 out · 0.00s
+`gpt-4o-mini` · live call · 1097 in / 124 out · 1.52s
 
 **system**
 
@@ -281,7 +285,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "wrong_aggregation_grain",
   "confidence": 0.9,
-  "explanation": "The query under review aggregates payments based on completed orders but includes all payments regardless of their status, leading to an inflated total. The independent recomputation correctly filters payments based on the order status, resulting in a significantly lower total.",
+  "explanation": "The query under review aggregates payments based on completed orders but does not filter out payments that are not associated with completed orders correctly. The independent recomputation shows a significantly lower total, indicating that the join with order_items is causing an overcount.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```

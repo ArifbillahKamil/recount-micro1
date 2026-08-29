@@ -1,6 +1,6 @@
 {
   "label": "ablation-no-recompute-gpt-4o-mini",
-  "generated_at": "2026-08-29T02:04:56Z",
+  "generated_at": "2026-08-29T02:15:29Z",
   "config": {
     "model": "gpt-4o-mini",
     "mode": "auto",
@@ -21,39 +21,39 @@
         "n_bug": 8,
         "n_clean": 4,
         "confusion": {
-          "tp": 4,
+          "tp": 3,
           "fp": 0,
-          "fn": 4,
+          "fn": 5,
           "tn": 4
         },
         "precision": 1.0,
-        "recall": 0.5,
-        "f1": 0.6667,
+        "recall": 0.375,
+        "f1": 0.5455,
         "false_alarm_rate": 0.0,
-        "repair_accuracy": 0.5,
-        "repairs_correct": 4,
+        "repair_accuracy": 0.375,
+        "repairs_correct": 3,
         "repairs_attempted": 4,
         "bug_type_accuracy": 1.0,
-        "escalations_on_bug": 1,
+        "escalations_on_bug": 2,
         "escalations_on_clean": 0,
-        "errors": 0,
-        "net_analyst_minutes_modelled": 44.0,
+        "errors": 1,
+        "net_analyst_minutes_modelled": 28.0,
         "time_model": "confirmed bug +12 min, false alarm -8 min, escalation -4 min, missed bug 0 min (counted as recall, not time)",
-        "total_cost_usd": 0.002474,
-        "cost_per_case_usd": 0.000206,
+        "total_cost_usd": 0.002486,
+        "cost_per_case_usd": 0.000207,
         "cost_known": true,
-        "total_latency_s": 0.03,
-        "latency_per_case_s": 0.0,
+        "total_latency_s": 18.38,
+        "latency_per_case_s": 1.53,
         "llm_calls": 12,
         "tool_calls": 16
       },
       "client": {
         "model": "gpt-4o-mini",
         "mode": "auto",
-        "cassette_hits": 12,
-        "cassette_misses": 0,
-        "live_calls": 0,
-        "billed_cost_usd": 0.0,
+        "cassette_hits": 0,
+        "cassette_misses": 12,
+        "live_calls": 12,
+        "billed_cost_usd": 0.002487,
         "pricing_known": true,
         "parameter_quirks_applied": [],
         "completion_budget_scale": 1
@@ -66,15 +66,15 @@
           "verdict": "CLEAN",
           "bug_type": null,
           "class": "FN",
-          "confidence": 0.9,
+          "confidence": 1.0,
           "repair_attempted": false,
           "repair_correct": false,
-          "latency_s": 0.0,
-          "cost_usd": 0.000205,
+          "latency_s": 2.13,
+          "cost_usd": 0.000203,
           "llm_calls": 1,
           "tool_calls": 1,
           "error": null,
-          "explanation": "The SQL query correctly sums the amount captured from completed orders by joining the orders, order_items, and payments tables. The condition on the order status ensures that only completed orders are considered, which aligns with the business question. The result of 14274325000 cents appears to be a valid total for captured payments."
+          "explanation": "The SQL query correctly sums the amount captured from completed orders by joining the orders, order_items, and payments tables. The condition on the order status ensures that only completed orders are considered, which aligns with the business question. The result of 14274325000 cents accurately reflects the total captured amount."
         },
         {
           "case_id": "B2_fanout_units_via_payments",
@@ -86,12 +86,12 @@
           "confidence": 0.9,
           "repair_attempted": false,
           "repair_correct": false,
-          "latency_s": 0.0,
-          "cost_usd": 0.000204,
+          "latency_s": 1.42,
+          "cost_usd": 0.000199,
           "llm_calls": 1,
           "tool_calls": 1,
           "error": null,
-          "explanation": "The SQL query correctly sums the quantity of order items from completed orders by joining the orders, order_items, and payments tables. The condition on the order status ensures that only completed orders are considered, which aligns with the business question. The absence of probes and independent recomputation slightly lowers confidence, but the logic appears sound."
+          "explanation": "The SQL query correctly sums the quantity of order items from completed orders by joining the orders and order_items tables. The inclusion of the payments table does not affect the aggregation since it only filters for completed orders. The result of 3648 units sold aligns with the business question."
         },
         {
           "case_id": "B3_null_swallowing_status_filter",
@@ -103,12 +103,12 @@
           "confidence": 0.9,
           "repair_attempted": false,
           "repair_correct": false,
-          "latency_s": 0.0,
-          "cost_usd": 0.000186,
+          "latency_s": 1.26,
+          "cost_usd": 0.000202,
           "llm_calls": 1,
           "tool_calls": 1,
           "error": null,
-          "explanation": "The SQL query correctly counts the number of active orders by filtering out those with a status of 'cancelled'. It aligns with the business question regarding the status of orders in the 'orders' table."
+          "explanation": "The SQL query correctly counts the number of active orders by filtering out those with a 'cancelled' status from the 'orders' table. It aligns with the business question of identifying orders that are not cancelled, including those without a fulfilment status. The absence of probes and recomputation does not indicate an issue with the query itself."
         },
         {
           "case_id": "B4_left_join_degraded_to_inner",
@@ -120,12 +120,12 @@
           "confidence": 0.8,
           "repair_attempted": true,
           "repair_correct": true,
-          "latency_s": 0.0,
-          "cost_usd": 0.000229,
+          "latency_s": 1.98,
+          "cost_usd": 0.000238,
           "llm_calls": 1,
           "tool_calls": 2,
           "error": null,
-          "explanation": "The query uses a LEFT JOIN between orders and refunds, but the WHERE clause filters out any refunds with negative amounts, which effectively turns it into an INNER JOIN. This could lead to an undercount of orders if any orders have refunds that are not included due to this condition."
+          "explanation": "The query uses a LEFT JOIN between orders and refunds, but the WHERE clause filters out any refunds with negative amounts, which effectively turns it into an INNER JOIN. This could lead to an undercount of orders if any orders have refunds that are negative or if they have no refunds at all. The tables involved are 'orders' and 'refunds'."
         },
         {
           "case_id": "B5_between_loses_last_day",
@@ -137,29 +137,29 @@
           "confidence": 0.5,
           "repair_attempted": false,
           "repair_correct": false,
-          "latency_s": 0.0,
-          "cost_usd": 0.000193,
+          "latency_s": 1.31,
+          "cost_usd": 0.000195,
           "llm_calls": 1,
           "tool_calls": 1,
           "error": null,
-          "explanation": "The SQL query is attempting to count orders placed in January 2026, but the data is not available for that future date. Without executing a recomputation or having access to the data for that period, I cannot confirm the accuracy of the result."
+          "explanation": "The SQL query counts orders placed in January 2026, but the data is not available for that date as it is beyond the training data cutoff of October 2023. Without executing probes or independent recomputation, I cannot confirm the accuracy of the result."
         },
         {
           "case_id": "B6_timezone_day_misattribution",
           "truth": "BUG",
           "expected_bug_type": "timezone_day_boundary",
-          "verdict": "BUG",
-          "bug_type": "timezone_day_boundary",
-          "class": "TP",
+          "verdict": "ESCALATE",
+          "bug_type": null,
+          "class": "FN",
           "confidence": 0.9,
           "repair_attempted": true,
-          "repair_correct": true,
-          "latency_s": 0.0,
-          "cost_usd": 0.000211,
+          "repair_correct": false,
+          "latency_s": 1.44,
+          "cost_usd": 0.000212,
           "llm_calls": 1,
           "tool_calls": 2,
-          "error": null,
-          "explanation": "The query counts orders based on the UTC date without considering the Asia/Jakarta timezone (UTC+7). This could lead to incorrect results if orders were placed late on January 30th UTC, which would fall into January 31st in Jakarta time."
+          "error": "correction_failed_to_execute",
+          "explanation": "A possible problem was raised, but the proposed correction failed to run (\"'localtime'\" makes the result depend on the machine running the query, so it cannot be reproduced. Use an explicit offset such as date(col, '+7 hours') instead of 'localtime', and a literal date instead of 'now'.). A human should look at this."
         },
         {
           "case_id": "B7_mixed_currency_unit_error",
@@ -171,12 +171,12 @@
           "confidence": 0.9,
           "repair_attempted": true,
           "repair_correct": true,
-          "latency_s": 0.0,
-          "cost_usd": 0.000223,
+          "latency_s": 1.62,
+          "cost_usd": 0.000218,
           "llm_calls": 1,
           "tool_calls": 2,
           "error": null,
-          "explanation": "The query aggregates payments from completed orders without filtering for the currency being 'IDR', which is necessary to answer the business question about Indonesian revenue. The orders table should be filtered to ensure only IDR-denominated orders are included in the revenue calculation."
+          "explanation": "The query aggregates payments from the 'payments' table without filtering for the currency 'IDR' in the 'orders' table. This could lead to incorrect revenue calculations if there are payments in other currencies."
         },
         {
           "case_id": "B8_missing_status_filter",
@@ -185,15 +185,15 @@
           "verdict": "BUG",
           "bug_type": "missing_filter",
           "class": "TP",
-          "confidence": 0.8,
+          "confidence": 0.9,
           "repair_attempted": true,
           "repair_correct": true,
-          "latency_s": 0.0,
-          "cost_usd": 0.000216,
+          "latency_s": 1.37,
+          "cost_usd": 0.000215,
           "llm_calls": 1,
           "tool_calls": 2,
           "error": null,
-          "explanation": "The SQL query does not filter for completed orders, which is necessary to accurately capture revenue from completed orders only. The 'orders' table has a 'status' column that should be used to filter for completed orders. Without this filter, the revenue calculation may include incomplete or canceled orders."
+          "explanation": "The query does not filter for completed orders, which is necessary to accurately capture revenue from only those orders. The 'orders' table has a 'status' column that should be used to filter for completed orders. Without this filter, the revenue calculation may include incomplete or canceled orders."
         },
         {
           "case_id": "C1_clean_distinct_order_count_with_payments",
@@ -202,15 +202,15 @@
           "verdict": "CLEAN",
           "bug_type": null,
           "class": "TN",
-          "confidence": 1.0,
+          "confidence": 0.9,
           "repair_attempted": false,
           "repair_correct": false,
-          "latency_s": 0.0,
-          "cost_usd": 0.000214,
+          "latency_s": 1.32,
+          "cost_usd": 0.00021,
           "llm_calls": 1,
           "tool_calls": 1,
           "error": null,
-          "explanation": "The SQL query correctly counts the distinct completed orders from the 'orders' table and sums the payment amounts from the 'payments' table, which aligns with the business question. The join between 'orders' and 'payments' is appropriate as it captures the total amount for completed orders. The returned results of 1018 orders and 5468920000 cents in total captured amount are valid."
+          "explanation": "The SQL query correctly counts distinct completed orders from the 'orders' table and sums the corresponding payment amounts from the 'payments' table. The join between 'orders' and 'payments' is appropriate as it captures the total amount for each completed order. The results returned align with the business question regarding the number of completed orders and the total captured amount."
         },
         {
           "case_id": "C2_clean_units_sold_at_line_grain",
@@ -219,15 +219,15 @@
           "verdict": "CLEAN",
           "bug_type": null,
           "class": "TN",
-          "confidence": 0.9,
+          "confidence": 1.0,
           "repair_attempted": false,
           "repair_correct": false,
-          "latency_s": 0.0,
-          "cost_usd": 0.000206,
+          "latency_s": 1.33,
+          "cost_usd": 0.000199,
           "llm_calls": 1,
           "tool_calls": 1,
           "error": null,
-          "explanation": "The SQL query correctly sums the quantity of order items from the order_items table, filtered by completed orders in the orders table. The join between orders and order_items is appropriate as it aggregates the quantity at the order item level, which is necessary to answer the business question about total units sold. The result of 2993 units sold aligns with the intended metric."
+          "explanation": "The SQL query correctly sums the quantity of order items from the order_items table, filtered by completed orders in the orders table. The join between orders and order_items is appropriate as it aggregates the quantity at the correct grain of completed orders. The returned result of 2993 units sold aligns with the business question."
         },
         {
           "case_id": "C3_clean_null_safe_active_orders",
@@ -239,12 +239,12 @@
           "confidence": 1.0,
           "repair_attempted": false,
           "repair_correct": false,
-          "latency_s": 0.0,
-          "cost_usd": 0.000187,
+          "latency_s": 1.43,
+          "cost_usd": 0.000202,
           "llm_calls": 1,
           "tool_calls": 1,
           "error": null,
-          "explanation": "The SQL query correctly counts the number of orders that are not cancelled by using the COALESCE function to treat unset statuses as 'unknown'. This aligns with the business question regarding active orders in the 'orders' table."
+          "explanation": "The SQL query correctly counts the number of orders in the 'orders' table that are not cancelled, including those with an unset status. The use of COALESCE ensures that unset statuses are treated as not cancelled, aligning with the business question. The result of 1357 active orders is consistent with the intended logic of the query."
         },
         {
           "case_id": "C4_clean_half_open_date_range",
@@ -256,12 +256,12 @@
           "confidence": 1.0,
           "repair_attempted": false,
           "repair_correct": false,
-          "latency_s": 0.0,
-          "cost_usd": 0.0002,
+          "latency_s": 1.77,
+          "cost_usd": 0.000193,
           "llm_calls": 1,
           "tool_calls": 1,
           "error": null,
-          "explanation": "The SQL query correctly counts the number of orders placed in January 2026 by filtering the 'orders' table based on the 'order_ts' timestamp. The date range specified accurately captures all orders within the month of January 2026 in UTC. No discrepancies were found in the execution of the query."
+          "explanation": "The SQL query correctly counts the number of orders placed in January 2026 by filtering on the order_ts column in the orders table. The date range specified accurately captures all orders within that month. No discrepancies were found in the logic of the query."
         }
       ]
     }

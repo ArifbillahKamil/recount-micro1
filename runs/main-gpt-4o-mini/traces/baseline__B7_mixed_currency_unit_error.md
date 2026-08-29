@@ -1,6 +1,6 @@
 # Trajectory — baseline — B7_mixed_currency_unit_error
 
-`1` model calls (`1` replayed from cassette) · `0` tool calls · `935` tokens · `$0.00020`
+`1` model calls (`0` replayed from cassette) · `0` tool calls · `930` tokens · `$0.00020`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · replayed · 798 in / 137 out · 0.00s
+`gpt-4o-mini` · live call · 798 in / 132 out · 1.83s
 
 **system**
 
@@ -130,14 +130,14 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query does not filter for Indonesian orders, as it lacks a condition to check that the currency of the orders is 'IDR'. This means it could include payments from orders in other currencies, which does not accurately reflect the total captured revenue for the Indonesian business.",
+  "explanation": "The query does not filter for Indonesian orders, as it lacks a condition to check that the currency of the orders is 'IDR'. This means it could include payments from orders in other currencies, which does not answer the business question accurately.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'"
 }
 ```
 
 ## 3. gate · final
 
-**BUG** — The query does not filter for Indonesian orders, as it lacks a condition to check that the currency of the orders is 'IDR'. This means it could include payments from orders in other currencies, which does not accurately reflect the total captured revenue for the Indonesian business.
+**BUG** — The query does not filter for Indonesian orders, as it lacks a condition to check that the currency of the orders is 'IDR'. This means it could include payments from orders in other currencies, which does not answer the business question accurately.
 
 ```json
 {

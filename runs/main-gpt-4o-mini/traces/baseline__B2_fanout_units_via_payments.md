@@ -1,6 +1,6 @@
 # Trajectory — baseline — B2_fanout_units_via_payments
 
-`1` model calls (`1` replayed from cassette) · `0` tool calls · `897` tokens · `$0.00018`
+`1` model calls (`0` replayed from cassette) · `0` tool calls · `898` tokens · `$0.00018`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · replayed · 802 in / 95 out · 0.00s
+`gpt-4o-mini` · live call · 802 in / 96 out · 1.57s
 
 **system**
 
@@ -130,19 +130,19 @@ actually lives at that finer grain.
 {
   "verdict": "CLEAN",
   "bug_type": null,
-  "confidence": 0.95,
-  "explanation": "The query correctly sums the quantity of units sold from the order_items table, filtered by completed orders in the orders table. It also ensures that only orders with associated payments are considered, which is appropriate for completed orders. The joins and conditions align with the business question asked.",
+  "confidence": 1,
+  "explanation": "The query correctly sums the quantity of units sold from the order_items table, filtered by completed orders in the orders table. It also ensures that only orders with associated payments are considered, which is appropriate for completed orders. Therefore, the result accurately reflects the total units sold on completed orders.",
   "corrected_sql": null
 }
 ```
 
 ## 3. gate · final
 
-**CLEAN** — The query correctly sums the quantity of units sold from the order_items table, filtered by completed orders in the orders table. It also ensures that only orders with associated payments are considered, which is appropriate for completed orders. The joins and conditions align with the business question asked.
+**CLEAN** — The query correctly sums the quantity of units sold from the order_items table, filtered by completed orders in the orders table. It also ensures that only orders with associated payments are considered, which is appropriate for completed orders. Therefore, the result accurately reflects the total units sold on completed orders.
 
 ```json
 {
   "bug_type": null,
-  "confidence": 0.95
+  "confidence": 1.0
 }
 ```

@@ -1,6 +1,6 @@
 # Trajectory — recount — B5_between_loses_last_day
 
-`3` model calls (`2` replayed from cassette) · `6` tool calls · `3427` tokens · `$0.00083`
+`3` model calls (`1` replayed from cassette) · `6` tool calls · `3444` tokens · `$0.00082`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -32,7 +32,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 580 in / 83 out · 0.00s
+`gpt-4o-mini` · replayed · 627 in / 83 out · 0.00s
 
 **system**
 
@@ -118,6 +118,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 january_orders
 
@@ -150,7 +154,7 @@ january_orders
 
 ## 6. model · plan
 
-`gpt-4o-mini` · replayed · 798 in / 468 out · 0.00s
+`gpt-4o-mini` · live call · 798 in / 464 out · 4.04s
 
 **system**
 
@@ -280,18 +284,18 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "Orders may have been placed in a different timezone, affecting the count for UTC.",
       "bug_type": "timezone_day_boundary",
       "probe_sql": "SELECT COUNT(*) AS january_orders_utc FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'",
-      "settles": "If the result is different from 539, it confirms the issue; if it is 539, it rules it out."
+      "settles": "If the result is greater than 539, it confirms the issue; if it is 539 or less, it rules it out."
     },
     {
-      "risk": "Some orders may have a null status, which could affect the interpretation of the results.",
+      "risk": "Some orders may have a NULL status, which could affect the interpretation of the results.",
       "bug_type": "null_swallowing_predicate",
       "probe_sql": "SELECT COUNT(*) AS january_orders_with_null_status FROM orders WHERE order_ts BETWEEN '2026-01-01' AND '2026-01-31' AND status IS NULL",
       "settles": "If the result is greater than 0, it confirms the issue; if it is 0, it rules it out."
     },
     {
-      "risk": "The query may not account for orders that were refunded, which could misrepresent the actual orders placed.",
-      "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(DISTINCT order_id) AS refunded_orders_january FROM refunds WHERE refund_ts BETWEEN '2026-01-01' AND '2026-01-31'",
+      "risk": "There may be orders that were refunded, which could affect the count of valid orders.",
+      "bug_type": "other",
+      "probe_sql": "SELECT COUNT(DISTINCT order_id) AS refunded_orders FROM refunds WHERE refund_ts BETWEEN '2026-01-01' AND '2026-01-31'",
       "settles": "If the result is greater than 0, it confirms the issue; if it is 0, it rules it out."
     }
   ]
@@ -351,20 +355,20 @@ january_orders_with_null_status
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT order_id) AS refunded_orders_january FROM refunds WHERE refund_ts BETWEEN '2026-01-01' AND '2026-01-31'
+SELECT COUNT(DISTINCT order_id) AS refunded_orders FROM refunds WHERE refund_ts BETWEEN '2026-01-01' AND '2026-01-31'
 ```
 
 **response**
 
 ```
-refunded_orders_january
------------------------
-21                     
+refunded_orders
+---------------
+21             
 ```
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · live call · 1342 in / 156 out · 2.05s
+`gpt-4o-mini` · live call · 1335 in / 137 out · 1.66s
 
 **system**
 
@@ -467,19 +471,19 @@ Probes you designed, and what executing them actually returned:
     ------------------
     557               
 
-[3] risk: Some orders may have a null status, which could affect the interpretation of the results.
+[3] risk: Some orders may have a NULL status, which could affect the interpretation of the results.
     probe: SELECT COUNT(*) AS january_orders_with_null_status FROM orders WHERE order_ts BETWEEN '2026-01-01' AND '2026-01-31' AND status IS NULL
     returned:
     january_orders_with_null_status
     -------------------------------
     30                             
 
-[4] risk: The query may not account for orders that were refunded, which could misrepresent the actual orders placed.
-    probe: SELECT COUNT(DISTINCT order_id) AS refunded_orders_january FROM refunds WHERE refund_ts BETWEEN '2026-01-01' AND '2026-01-31'
+[4] risk: There may be orders that were refunded, which could affect the count of valid orders.
+    probe: SELECT COUNT(DISTINCT order_id) AS refunded_orders FROM refunds WHERE refund_ts BETWEEN '2026-01-01' AND '2026-01-31'
     returned:
-    refunded_orders_january
-    -----------------------
-    21                     
+    refunded_orders
+    ---------------
+    21             
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
@@ -534,7 +538,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "date_range_truncation",
   "confidence": 0.9,
-  "explanation": "The query under review uses a date range that excludes the last day of January, which leads to an undercount of orders. The independent recomputation correctly includes all orders placed in January 2026, returning a higher count. This discrepancy indicates that the original query does not accurately reflect the total number of orders for the specified month.",
+  "explanation": "The query under review uses a date range that excludes the last day of January, which leads to an undercount of orders. The independent recomputation correctly includes all orders placed in January 2026 by using a proper inclusive date range.",
   "corrected_sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'"
 }
 ```

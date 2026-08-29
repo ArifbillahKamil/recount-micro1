@@ -1,6 +1,6 @@
 # Trajectory — baseline — B6_timezone_day_misattribution
 
-`1` model calls (`1` replayed from cassette) · `0` tool calls · `920` tokens · `$0.00020`
+`1` model calls (`0` replayed from cassette) · `0` tool calls · `920` tokens · `$0.00020`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · replayed · 789 in / 131 out · 0.00s
+`gpt-4o-mini` · live call · 789 in / 131 out · 1.61s
 
 **system**
 

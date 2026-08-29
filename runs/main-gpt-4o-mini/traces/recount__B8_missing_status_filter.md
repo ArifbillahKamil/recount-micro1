@@ -1,6 +1,6 @@
 # Trajectory — recount — B8_missing_status_filter
 
-`2` model calls (`2` replayed from cassette) · `2` tool calls · `1781` tokens · `$0.00035`
+`2` model calls (`0` replayed from cassette) · `2` tool calls · `1850` tokens · `$0.00037`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -32,7 +32,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 580 in / 67 out · 0.00s
+`gpt-4o-mini` · live call · 627 in / 83 out · 1.60s
 
 **system**
 
@@ -118,6 +118,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 revenue_cents
 
@@ -129,7 +133,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the payment amounts for orders that have a status of 'completed', ensuring we only capture revenue from completed orders."}
+{"sql": "SELECT SUM(oi.quantity * oi.unit_price_cents) AS revenue_cents FROM orders o JOIN order_items oi ON o.order_id = oi.order_id WHERE o.status = 'completed'", "reasoning": "The query calculates the total revenue from completed orders by summing the product of quantity and unit price for each order item associated with orders that have a status of 'completed'."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -137,7 +141,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'
+SELECT SUM(oi.quantity * oi.unit_price_cents) AS revenue_cents FROM orders o JOIN order_items oi ON o.order_id = oi.order_id WHERE o.status = 'completed'
 ```
 
 **response**
@@ -154,7 +158,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1010 in / 124 out · 0.00s
+`gpt-4o-mini` · live call · 1016 in / 124 out · 1.32s
 
 **system**
 
@@ -247,7 +251,7 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'
+  sql: SELECT SUM(oi.quantity * oi.unit_price_cents) AS revenue_cents FROM orders o JOIN order_items oi ON o.order_id = oi.order_id WHERE o.status = 'completed'
   returned:
     revenue_cents
     -------------
@@ -296,10 +300,10 @@ actually lives at that finer grain.
 ```json
 {
   "verdict": "BUG",
-  "bug_type": "missing_filter",
-  "confidence": 0.95,
-  "explanation": "The query under review does not filter for completed orders, which is necessary to answer the business question accurately. The independent recomputation correctly includes the filter for completed orders from the 'orders' table. This discrepancy leads to a significant difference in the reported revenue.",
-  "corrected_sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'"
+  "bug_type": "wrong_aggregation_grain",
+  "confidence": 0.9,
+  "explanation": "The query under review aggregates revenue from the payments table, which does not filter for completed orders. In contrast, the independent recomputation correctly sums revenue from order_items for completed orders, resulting in a different total.",
+  "corrected_sql": "SELECT SUM(oi.quantity * oi.unit_price_cents) AS revenue_cents FROM orders o JOIN order_items oi ON o.order_id = oi.order_id WHERE o.status = 'completed'"
 }
 ```
 

@@ -1,6 +1,6 @@
 # Trajectory — recount — B4_left_join_degraded_to_inner
 
-`1` model calls (`1` replayed from cassette) · `2` tool calls · `1105` tokens · `$0.00023`
+`1` model calls (`0` replayed from cassette) · `2` tool calls · `1121` tokens · `$0.00024`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -42,7 +42,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 965 in / 140 out · 0.00s
+`gpt-4o-mini` · live call · 965 in / 156 out · 1.97s
 
 **system**
 
@@ -177,7 +177,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "left_join_degraded_to_inner",
   "confidence": 0.8,
-  "explanation": "The query uses a LEFT JOIN between orders and refunds, but the WHERE clause filters out any refunds with negative amounts, which effectively turns it into an INNER JOIN. This could lead to an undercount of orders if any orders have refunds that are not included due to this condition.",
+  "explanation": "The query uses a LEFT JOIN between orders and refunds, but the WHERE clause filters out any refunds with negative amounts, which effectively turns it into an INNER JOIN. This could lead to an undercount of orders if any orders have refunds that are negative or if they have no refunds at all. The tables involved are 'orders' and 'refunds'.",
   "corrected_sql": "SELECT COUNT(*) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id"
 }
 ```

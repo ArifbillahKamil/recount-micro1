@@ -1,7 +1,7 @@
 {
   "cassette_key": "73bf35fde420eba6dd6048c769b87087",
   "step": "baseline_review",
-  "recorded_at": "2026-08-29T01:51:21Z",
+  "recorded_at": "2026-08-29T02:14:24Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2WKoSajld2T2ZDsPvmfnuOBdPfS",
+    "id": "chatcmpl-EI2scdjGWYdkRwtJja9MxVL47n4RA",
     "object": "chat.completion",
-    "created": 1787968300,
+    "created": 1787969682,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"timezone_day_boundary\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query does not account for the full day of January 31, 2026, as it uses a range that ends at midnight of that day, which excludes any orders placed on January 31. The 'order_ts' field is in UTC, and the correct range should include the entire day of January 31. The relevant table is 'orders'.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01' AND order_ts < '2026-02-01'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"date_range_truncation\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query uses a date range that includes only the start and end of January 2026, but it does not account for the entire day of January 31st. The 'BETWEEN' clause should include the end of the day on January 31st to capture all orders placed on that day. The relevant table is 'orders'.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01' AND order_ts < '2026-02-01'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 780,
-      "completion_tokens": 147,
-      "total_tokens": 927,
+      "completion_tokens": 145,
+      "total_tokens": 925,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

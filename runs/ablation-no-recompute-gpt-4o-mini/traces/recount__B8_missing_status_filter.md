@@ -1,6 +1,6 @@
 # Trajectory — recount — B8_missing_status_filter
 
-`1` model calls (`1` replayed from cassette) · `2` tool calls · `1050` tokens · `$0.00022`
+`1` model calls (`0` replayed from cassette) · `2` tool calls · `1049` tokens · `$0.00021`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -40,7 +40,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 920 in / 130 out · 0.00s
+`gpt-4o-mini` · live call · 920 in / 129 out · 1.37s
 
 **system**
 
@@ -172,8 +172,8 @@ actually lives at that finer grain.
 {
   "verdict": "BUG",
   "bug_type": "missing_filter",
-  "confidence": 0.8,
-  "explanation": "The SQL query does not filter for completed orders, which is necessary to accurately capture revenue from completed orders only. The 'orders' table has a 'status' column that should be used to filter for completed orders. Without this filter, the revenue calculation may include incomplete or canceled orders.",
+  "confidence": 0.9,
+  "explanation": "The query does not filter for completed orders, which is necessary to accurately capture revenue from only those orders. The 'orders' table has a 'status' column that should be used to filter for completed orders. Without this filter, the revenue calculation may include incomplete or canceled orders.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```

@@ -1,7 +1,7 @@
 {
   "cassette_key": "a7f493c8d9dab083fb171017dc425234",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:53:21Z",
+  "recorded_at": "2026-08-29T02:16:23Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2YGKQGAlkfKWkDJAcNzppH60iw1",
+    "id": "chatcmpl-EI2uYW30yxxDmMmXb8dUj1feaPLZT",
     "object": "chat.completion",
-    "created": 1787968420,
+    "created": 1787969802,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 1.0,\n  \"explanation\": \"The query correctly counts the number of active orders by including those with a NULL status as not cancelled. Both the query under review and the independent recomputation returned the same result of 1357 active orders.\",\n  \"corrected_sql\": null\n}",
+          "content": "{\n  \"verdict\": \"CLEAN\",\n  \"bug_type\": null,\n  \"confidence\": 1.0,\n  \"explanation\": \"The query correctly counts the number of active orders by including orders with a NULL status as not cancelled. Both the query under review and the independent recomputation returned the same result of 1357 active orders.\",\n  \"corrected_sql\": null\n}",
           "refusal": null,
           "annotations": []
         },

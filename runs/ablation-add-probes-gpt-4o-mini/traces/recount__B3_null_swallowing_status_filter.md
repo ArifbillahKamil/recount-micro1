@@ -1,6 +1,6 @@
 # Trajectory — recount — B3_null_swallowing_status_filter
 
-`3` model calls (`3` replayed from cassette) · `6` tool calls · `3159` tokens · `$0.00072`
+`3` model calls (`1` replayed from cassette) · `6` tool calls · `3235` tokens · `$0.00074`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -32,7 +32,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 590 in / 56 out · 0.00s
+`gpt-4o-mini` · replayed · 637 in / 56 out · 0.00s
 
 **system**
 
@@ -118,6 +118,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 active_orders
 
@@ -150,7 +154,7 @@ active_orders
 
 ## 6. model · plan
 
-`gpt-4o-mini` · replayed · 795 in / 394 out · 0.00s
+`gpt-4o-mini` · live call · 795 in / 388 out · 3.93s
 
 **system**
 
@@ -274,25 +278,25 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "The status column in the orders table may contain NULL values that are not counted as active orders.",
       "bug_type": "null_swallowing_predicate",
       "probe_sql": "SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL",
-      "settles": "If the count of null_status_orders is greater than 0, it confirms the issue; if it is 0, the issue is ruled out."
+      "settles": "If the count is greater than 0, it confirms the issue; if 0, it rules it out."
     },
     {
-      "risk": "There may be orders with a status of 'pending' or other non-cancelled statuses that are not considered active.",
+      "risk": "There may be orders with a status that is neither 'cancelled' nor NULL, which are not counted as active orders.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) AS non_cancelled_orders FROM orders WHERE status IS NULL OR status != 'cancelled'",
-      "settles": "If non_cancelled_orders is greater than active_orders, it confirms the issue; if it is equal, the issue is ruled out."
+      "probe_sql": "SELECT COUNT(DISTINCT status) AS distinct_statuses FROM orders",
+      "settles": "If the count of distinct statuses is greater than 2, it confirms the issue; if 2 or less, it rules it out."
     },
     {
-      "risk": "The query does not account for orders that have been created but not yet fulfilled, which may still be considered active.",
+      "risk": "Orders that are not cancelled may still be incorrectly counted due to the presence of other statuses.",
       "bug_type": "wrong_aggregation_grain",
-      "probe_sql": "SELECT COUNT(*) AS unfulfilled_orders FROM orders WHERE status IS NULL",
-      "settles": "If unfulfilled_orders is greater than 0, it confirms the issue; if it is 0, the issue is ruled out."
+      "probe_sql": "SELECT COUNT(*) AS total_orders, COUNT(CASE WHEN status != 'cancelled' THEN 1 END) AS active_orders FROM orders",
+      "settles": "If total_orders is greater than active_orders, it confirms the issue; if they are equal, it rules it out."
     },
     {
-      "risk": "The query does not differentiate between orders that have been refunded and those that are still active.",
+      "risk": "The query does not account for orders that have not been fulfilled and thus may still be considered live business.",
       "bug_type": "other",
-      "probe_sql": "SELECT COUNT(DISTINCT order_id) AS refunded_orders FROM refunds",
-      "settles": "If refunded_orders is greater than 0, it confirms the issue; if it is 0, the issue is ruled out."
+      "probe_sql": "SELECT COUNT(*) AS unfulfilled_orders FROM orders WHERE status IS NULL",
+      "settles": "If the count is greater than 0, it confirms the issue; if 0, it rules it out."
     }
   ]
 }
@@ -319,18 +323,34 @@ null_status_orders
 **request**
 
 ```sql
-SELECT COUNT(*) AS non_cancelled_orders FROM orders WHERE status IS NULL OR status != 'cancelled'
+SELECT COUNT(DISTINCT status) AS distinct_statuses FROM orders
 ```
 
 **response**
 
 ```
-non_cancelled_orders
---------------------
-1357                
+distinct_statuses
+-----------------
+4                
 ```
 
 ## 9. tool · `run_sql` · probe_3 · ok
+
+**request**
+
+```sql
+SELECT COUNT(*) AS total_orders, COUNT(CASE WHEN status != 'cancelled' THEN 1 END) AS active_orders FROM orders
+```
+
+**response**
+
+```
+total_orders | active_orders
+-------------+--------------
+1500         | 1277         
+```
+
+## 10. tool · `run_sql` · probe_4 · ok
 
 **request**
 
@@ -346,25 +366,9 @@ unfulfilled_orders
 80                
 ```
 
-## 10. tool · `run_sql` · probe_4 · ok
-
-**request**
-
-```sql
-SELECT COUNT(DISTINCT order_id) AS refunded_orders FROM refunds
-```
-
-**response**
-
-```
-refunded_orders
----------------
-103            
-```
-
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1226 in / 98 out · 0.00s
+`gpt-4o-mini` · live call · 1242 in / 117 out · 1.49s
 
 **system**
 
@@ -460,26 +464,26 @@ Probes you designed, and what executing them actually returned:
     ------------------
     80                
 
-[2] risk: There may be orders with a status of 'pending' or other non-cancelled statuses that are not considered active.
-    probe: SELECT COUNT(*) AS non_cancelled_orders FROM orders WHERE status IS NULL OR status != 'cancelled'
+[2] risk: There may be orders with a status that is neither 'cancelled' nor NULL, which are not counted as active orders.
+    probe: SELECT COUNT(DISTINCT status) AS distinct_statuses FROM orders
     returned:
-    non_cancelled_orders
-    --------------------
-    1357                
+    distinct_statuses
+    -----------------
+    4                
 
-[3] risk: The query does not account for orders that have been created but not yet fulfilled, which may still be considered active.
+[3] risk: Orders that are not cancelled may still be incorrectly counted due to the presence of other statuses.
+    probe: SELECT COUNT(*) AS total_orders, COUNT(CASE WHEN status != 'cancelled' THEN 1 END) AS active_orders FROM orders
+    returned:
+    total_orders | active_orders
+    -------------+--------------
+    1500         | 1277         
+
+[4] risk: The query does not account for orders that have not been fulfilled and thus may still be considered live business.
     probe: SELECT COUNT(*) AS unfulfilled_orders FROM orders WHERE status IS NULL
     returned:
     unfulfilled_orders
     ------------------
     80                
-
-[4] risk: The query does not differentiate between orders that have been refunded and those that are still active.
-    probe: SELECT COUNT(DISTINCT order_id) AS refunded_orders FROM refunds
-    returned:
-    refunded_orders
-    ---------------
-    103            
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
@@ -534,7 +538,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query under review does not account for orders with a NULL status, which are still considered active. The independent recomputation correctly includes these orders, resulting in a higher count of active orders.",
+  "explanation": "The query under review does not account for orders with a NULL status, which are considered active orders. The independent recomputation correctly includes these orders, resulting in a higher count of active orders. The discrepancy indicates that the original query is missing a filter for NULL statuses in the orders table.",
   "corrected_sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'"
 }
 ```

@@ -1,6 +1,6 @@
 # Trajectory — recount — C1_clean_distinct_order_count_with_payments
 
-`1` model calls (`1` replayed from cassette) · `1` tool calls · `1073` tokens · `$0.00021`
+`1` model calls (`0` replayed from cassette) · `1` tool calls · `1067` tokens · `$0.00021`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -42,7 +42,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · replayed · 956 in / 117 out · 0.00s
+`gpt-4o-mini` · live call · 956 in / 111 out · 1.31s
 
 **system**
 
@@ -176,8 +176,8 @@ actually lives at that finer grain.
 {
   "verdict": "CLEAN",
   "bug_type": null,
-  "confidence": 1,
-  "explanation": "The SQL query correctly counts the distinct completed orders from the 'orders' table and sums the payment amounts from the 'payments' table, which aligns with the business question. The join between 'orders' and 'payments' is appropriate as it captures the total amount for completed orders. The returned results of 1018 orders and 5468920000 cents in total captured amount are valid.",
+  "confidence": 0.9,
+  "explanation": "The SQL query correctly counts distinct completed orders from the 'orders' table and sums the corresponding payment amounts from the 'payments' table. The join between 'orders' and 'payments' is appropriate as it captures the total amount for each completed order. The results returned align with the business question regarding the number of completed orders and the total captured amount.",
   "corrected_sql": null
 }
 ```

@@ -1,6 +1,6 @@
 # Trajectory — baseline — C2_clean_units_sold_at_line_grain
 
-`1` model calls (`1` replayed from cassette) · `0` tool calls · `871` tokens · `$0.00017`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `867` tokens · `$0.00017`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · replayed · 781 in / 90 out · 0.00s
+`gpt-4o-mini` · replayed · 781 in / 86 out · 0.00s
 
 **system**
 
@@ -130,14 +130,14 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "The query correctly sums the quantity of units sold from the order_items table, filtered by completed orders in the orders table. It accurately reflects the business question regarding total units sold across completed orders. Both the orders and order_items tables are appropriately joined and filtered.",
+  "explanation": "The query correctly sums the quantity of units sold from the order_items table, filtered by completed orders in the orders table. It accurately reflects the business question regarding total units sold across completed orders. Both tables involved are orders and order_items.",
   "corrected_sql": null
 }
 ```
 
 ## 3. gate · final
 
-**CLEAN** — The query correctly sums the quantity of units sold from the order_items table, filtered by completed orders in the orders table. It accurately reflects the business question regarding total units sold across completed orders. Both the orders and order_items tables are appropriately joined and filtered.
+**CLEAN** — The query correctly sums the quantity of units sold from the order_items table, filtered by completed orders in the orders table. It accurately reflects the business question regarding total units sold across completed orders. Both tables involved are orders and order_items.
 
 ```json
 {

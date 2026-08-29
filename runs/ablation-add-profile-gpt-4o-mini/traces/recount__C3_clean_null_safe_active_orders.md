@@ -1,6 +1,6 @@
 # Trajectory — recount — C3_clean_null_safe_active_orders
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1343` tokens · `$0.00027`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1390` tokens · `$0.00027`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -63,7 +63,7 @@ Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 356 in / 61 out · 1.02s
+`gpt-4o-mini` · live call · 403 in / 61 out · 0.94s
 
 **system**
 
@@ -97,6 +97,10 @@ SQLite warehouse.
 Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
+
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
 
 Return exactly these columns, in this order, with these names:
 active_orders
@@ -134,7 +138,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 844 in / 82 out · 0.00s
+`gpt-4o-mini` · live call · 844 in / 82 out · 1.28s
 
 **system**
 
@@ -231,7 +235,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1.0,
-  "explanation": "The query correctly counts the number of active orders by including those with a NULL status as not cancelled. Both the query under review and the independent recomputation returned the same result of 1357 active orders.",
+  "explanation": "The query correctly counts the number of active orders by including orders with a NULL status as not cancelled. Both the query under review and the independent recomputation returned the same result of 1357 active orders.",
   "corrected_sql": null
 }
 ```
