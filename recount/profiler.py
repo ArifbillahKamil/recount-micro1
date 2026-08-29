@@ -26,6 +26,10 @@ from .sqlio import run_sql, scalar
 
 TEMPORAL_HINTS = ("_ts", "_at", "date", "_time")
 
+# Who the digest is for. See Profile.to_prompt.
+REVIEWER = "reviewer"
+AUTHOR = "author"
+
 
 @dataclass
 class Column:
@@ -153,13 +157,32 @@ class Profile:
             ],
         }
 
-    def to_prompt(self, tables: Optional[list] = None) -> str:
-        """Compact digest for a prompt.
+    def to_prompt(self, tables: Optional[list] = None, role: str = REVIEWER) -> str:
+        """Compact digest for a prompt, tailored to what the reader is doing.
 
-        Ordered so the facts that most often decide a verdict -- grain, real
-        NULL counts, fan-out cardinality -- come first and survive truncation.
+        The same facts are not equally useful to every role, and handing over all
+        of them indiscriminately measurably hurt results.
+
+        A **reviewer** judging an existing query needs join cardinality most:
+        whether a table fans out is usually the whole question.
+
+        An **author** writing a query from scratch is harmed by those same
+        warnings. Told that ``order_items`` fans out x2.16, the model turns
+        defensive and wraps correct aggregates in ``DISTINCT`` and subqueries it
+        does not need, producing wrong SQL. What it actually needs is duller:
+        column types, which columns are really nullable, and the *stored format*
+        of values. One observed failure was a date filter written as
+        ``'2026-01-01T00:00:00Z'`` against timestamps stored as
+        ``'2026-01-01 02:11:00'``; string comparison then dropped the first day
+        of the month and admitted the first day of the next.
+
+        So the fan-out section is shown to reviewers and withheld from authors,
+        while value ranges -- which reveal the stored format -- go to both.
         """
         wanted = set(tables) if tables else None
+        if role == AUTHOR:
+            return self._author_prompt(wanted)
+
         lines = ["MEASURED WAREHOUSE FACTS", ""]
 
         fanouts = self.fanout_relationships()
@@ -194,6 +217,37 @@ class Profile:
                     bits.append(f"range {column.min_value} .. {column.max_value}")
                 lines.append(f"  {column.name}: {', '.join(bits)}")
             lines.append("")
+        return "\n".join(lines).rstrip()
+
+    def _author_prompt(self, wanted: Optional[set]) -> str:
+        """Facts needed to write a correct query, without the alarming ones."""
+        lines = ["MEASURED COLUMN FACTS", ""]
+        for table in self.tables:
+            if wanted and table.name not in wanted:
+                continue
+            lines.append(f"{table.name}: {table.row_count} rows, {table.grain()}")
+            for column in table.columns:
+                bits = [column.declared_type or "?"]
+                if column.is_pk:
+                    bits.append("pk")
+                if column.is_nullable_in_practice:
+                    pct = 100.0 * column.null_count / table.row_count if table.row_count else 0
+                    bits.append(
+                        f"NULL in {column.null_count} rows ({pct:.1f}%) -- a "
+                        "predicate on this column must handle NULL explicitly"
+                    )
+                bits.append(f"{column.distinct_count} distinct")
+                if column.min_value is not None:
+                    bits.append(f"values run {column.min_value!r} .. {column.max_value!r}")
+                lines.append(f"  {column.name}: {', '.join(bits)}")
+            lines.append("")
+
+        lines.append(
+            "Match the stored format exactly when you write a literal. The "
+            "quoted ranges above show how values are actually stored; comparing "
+            "against a differently formatted string compares text, not time, "
+            "and silently selects the wrong rows."
+        )
         return "\n".join(lines).rstrip()
 
 

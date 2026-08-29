@@ -545,6 +545,88 @@ def test_gate_ablation_lets_false_positive_through() -> None:
     )
 
 
+def test_profile_is_split_by_role() -> None:
+    """Authors and reviewers need different facts, and mixing them costs accuracy.
+
+    Diagnosed from a real false positive: the recomputation for C4 wrote
+    `order_ts >= '2026-01-01T00:00:00Z'` against timestamps stored as
+    `'2026-01-01 02:11:00'`. Because 'T' sorts after ' ', that dropped the first
+    day of January and admitted the first day of February -- 557 rows instead of
+    551 -- and the discrepancy was reported as a fault in a correct query.
+
+    With the profile enabled the format was known and C4 passed, but the fan-out
+    warnings made the author defensive enough to break C1 and C2. Hence the
+    split: authors get types, real NULLs and stored formats; reviewers get join
+    cardinality.
+    """
+    from recount.profiler import AUTHOR, REVIEWER, profile as build
+
+    prof = build(DB)
+    author = prof.to_prompt(tables=["orders"], role=AUTHOR)
+    reviewer = prof.to_prompt(tables=["orders"], role=REVIEWER)
+
+    check(
+        "the author is not shown fan-out warnings",
+        "FANS OUT" not in author,
+        author[:200],
+    )
+    check(
+        "the reviewer still is",
+        "FANS OUT" in reviewer,
+        reviewer[:200],
+    )
+    check(
+        "the author is shown the exact stored timestamp format",
+        repr("2026-01-01 02:11:00") in author,
+        author[:400],
+    )
+    check(
+        "and told to match it",
+        "match the stored format exactly" in author.lower(),
+        author[-200:],
+    )
+    check(
+        "the author still learns which columns are really nullable",
+        "NULL in 80 rows" in author,
+        author[:400],
+    )
+
+    # The recomputation step must receive the author view, not the reviewer one.
+    case = cases.by_id("C4_clean_half_open_date_range")
+    _, _, client = run(
+        case.case_id,
+        {
+            "plan": [_plan(_h("range", "SELECT COUNT(*) FROM orders"))],
+            "adjudicate": [
+                {
+                    "verdict": "CLEAN",
+                    "confidence": 0.9,
+                    "explanation": "Half-open range is correct.",
+                    "corrected_sql": None,
+                }
+            ],
+        },
+    )
+    recompute_prompt = client.prompt_for("recompute") or ""
+    adjudicate_prompt = client.prompt_for("adjudicate") or ""
+    check(
+        "recompute prompt carries the author view",
+        "FANS OUT" not in recompute_prompt and "MEASURED COLUMN FACTS" in recompute_prompt,
+        recompute_prompt[:200],
+    )
+    check(
+        "adjudicate prompt carries the reviewer view",
+        "FANS OUT" in adjudicate_prompt,
+        adjudicate_prompt[:200],
+    )
+    check(
+        "the query under review is withheld from the recompute step",
+        "BETWEEN" not in recompute_prompt.upper()
+        and case.sql.split()[1] not in recompute_prompt,
+        recompute_prompt[:200],
+    )
+
+
 def test_profile_ablation_falls_back_to_schema_only() -> None:
     case = cases.by_id("B1_fanout_payments_via_line_items")
     script = {
@@ -924,6 +1006,7 @@ TESTS = [
     test_malformed_verdict_fails_safe,
     test_prose_wrapped_json_is_recovered,
     test_gate_ablation_lets_false_positive_through,
+    test_profile_is_split_by_role,
     test_profile_ablation_falls_back_to_schema_only,
     test_probe_ablation_skips_planning,
     test_destructive_probe_is_blocked_and_reported,

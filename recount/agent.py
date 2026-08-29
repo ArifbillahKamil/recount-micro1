@@ -42,7 +42,7 @@ from typing import Optional
 
 from . import verdict as V
 from .llm import CassetteMiss, LLMClient, LLMError
-from .profiler import Profile, profile as build_profile
+from .profiler import AUTHOR, REVIEWER, Profile, profile as build_profile
 from .sqlio import (
     SqlError,
     render_result,
@@ -120,8 +120,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 {columns}
@@ -820,17 +820,22 @@ def review(
     profile = cached_profile or build_profile(db_path)
     tables = _referenced_tables(sql, profile)
     if enable_profile:
-        profile_text = profile.to_prompt(tables=tables)
+        # Two views of the same measurements. The reviewer needs join
+        # cardinality; the author needs types, real NULLs and stored formats, and
+        # is measurably harmed by fan-out warnings. See Profile.to_prompt.
+        profile_text = profile.to_prompt(tables=tables, role=REVIEWER)
+        author_profile_text = profile.to_prompt(tables=tables, role=AUTHOR)
         trace.add_tool(
             "profile_warehouse",
             "profiler.profile",
-            {"tables": tables},
+            {"tables": tables, "views": [REVIEWER, AUTHOR]},
             profile_text,
         )
     else:
         # Ablation: same pipeline, but the agent sees only the DDL and must
         # speculate about grain, NULLs and cardinality instead of knowing them.
         profile_text = "SCHEMA (no data profiling available)\n\n" + schema_ddl(db_path)
+        author_profile_text = profile_text
         trace.add_note(
             "profile_disabled",
             "Profiling disabled for this run; the agent sees the schema only.",
@@ -841,7 +846,7 @@ def review(
     try:
         if enable_recompute:
             recompute = _recompute(
-                client, trace, db_path, question, profile_text, original_result
+                client, trace, db_path, question, author_profile_text, original_result
             )
         else:
             trace.add_note(
