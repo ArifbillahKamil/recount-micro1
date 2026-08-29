@@ -1,0 +1,148 @@
+# Trajectory — baseline — B4_left_join_degraded_to_inner
+
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `955` tokens · `$0.00021`
+
+## 1. note · context
+
+Baseline context is the schema only: no data profiling, no query execution.
+
+```json
+{
+  "ddl_chars": 1792
+}
+```
+
+## 2. model · baseline_review
+
+`gpt-4o-mini` · replayed · 814 in / 141 out · 0.00s
+
+**system**
+
+```
+You are a senior analytics engineer reviewing SQL before its
+result goes into a business report. Decide whether the query correctly answers
+the business question that was asked.
+```
+
+**user**
+
+```
+Database schema:
+
+CREATE TABLE customers (
+    customer_id   INTEGER PRIMARY KEY,
+    name          TEXT    NOT NULL,
+    country       TEXT    NOT NULL,
+    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC
+);
+
+CREATE TABLE marketing_spend (
+    spend_date  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL,
+    spend_cents INTEGER NOT NULL,
+    PRIMARY KEY (spend_date, channel)
+);
+
+CREATE TABLE order_items (
+    order_item_id    INTEGER PRIMARY KEY,
+    order_id         INTEGER NOT NULL REFERENCES orders(order_id),
+    product_id       INTEGER NOT NULL REFERENCES products(product_id),
+    quantity         INTEGER NOT NULL,
+    unit_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE orders (
+    order_id    INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC
+    status      TEXT,               -- nullable on purpose
+    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'
+);
+
+CREATE TABLE payments (
+    payment_id   INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    paid_ts      TEXT    NOT NULL,
+    method       TEXT    NOT NULL
+);
+
+CREATE TABLE products (
+    product_id       INTEGER PRIMARY KEY,
+    name             TEXT    NOT NULL,
+    category         TEXT    NOT NULL,
+    list_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE refunds (
+    refund_id    INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    refund_ts    TEXT    NOT NULL,
+    reason       TEXT    NOT NULL
+);
+
+CREATE TABLE sessions (
+    session_id  INTEGER PRIMARY KEY,
+    customer_id INTEGER REFERENCES customers(customer_id),
+    session_ts  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL
+);
+
+Business question the analyst asked:
+Across all orders, how many orders are there and what is the total refunded amount? Orders that were never refunded count as zero.
+
+SQL that was produced and executed successfully:
+SELECT COUNT(*) AS orders_seen,
+                   COALESCE(SUM(r.amount_cents), 0) AS refunded_cents
+            FROM orders o
+            LEFT JOIN refunds r ON r.order_id = o.order_id
+            WHERE r.amount_cents >= 0
+
+The query ran without error and returned a plausible-looking result. Decide
+whether the number it returns actually answers the business question.
+
+Reply with one JSON object and nothing else:
+
+{
+  "verdict": "CLEAN" | "BUG" | "ESCALATE",
+  "bug_type": one of ["fanout_join", "null_swallowing_predicate", "left_join_degraded_to_inner", "date_range_truncation", "timezone_day_boundary", "mixed_unit_aggregation", "missing_filter", "wrong_aggregation_grain", "other"] or null,
+  "confidence": number between 0 and 1,
+  "explanation": "at most 3 sentences, concrete, naming the tables involved",
+  "corrected_sql": "a single SELECT that answers the business question, or null"
+}
+
+Verdict meanings:
+  CLEAN     - the query correctly answers the business question.
+  BUG       - the query runs but returns a number that does not answer the
+              business question. Set bug_type and corrected_sql.
+  ESCALATE  - answering needs a business decision you cannot make from the
+              schema and data alone. Use this instead of guessing.
+
+Judge the query against the business question, not against style. A join to a
+finer grain is a bug when the metric is coarser, and correct when the metric
+actually lives at that finer grain.
+```
+
+**assistant**
+
+```json
+{
+  "verdict": "BUG",
+  "bug_type": "missing_filter",
+  "confidence": 0.9,
+  "explanation": "The query counts all orders but incorrectly filters the refunds with 'WHERE r.amount_cents >= 0', which is unnecessary and could lead to excluding valid refunds. The correct approach is to count all orders and sum the refunds without this filter to ensure all orders are considered, including those with zero refunds.",
+  "corrected_sql": "SELECT COUNT(*) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id"
+}
+```
+
+## 3. gate · final
+
+**BUG** — The query counts all orders but incorrectly filters the refunds with 'WHERE r.amount_cents >= 0', which is unnecessary and could lead to excluding valid refunds. The correct approach is to count all orders and sum the refunds without this filter to ensure all orders are considered, including those with zero refunds.
+
+```json
+{
+  "bug_type": "missing_filter",
+  "confidence": 0.9
+}
+```

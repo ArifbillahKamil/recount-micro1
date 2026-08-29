@@ -1,0 +1,60 @@
+{
+  "cassette_key": "91c5407ab5183e7725e702b5a3680d02",
+  "step": "adjudicate",
+  "recorded_at": "2026-08-29T01:16:40Z",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a senior analytics engineer signing off on\nwhether a number can go into a business report. You have executed probes and an\nindependent recomputation, and you now decide based on what they returned."
+      },
+      {
+        "role": "user",
+        "content": "Business question the analyst asked:\nWhat revenue did we capture from completed orders only, in cents?\n\nSQL under review:\nSELECT SUM(p.amount_cents) AS revenue_cents\n            FROM orders o\n            JOIN payments p ON p.order_id = o.order_id\n\nResult it returned:\nrevenue_cents\n-------------\n7301960000   \n\nSCHEMA (no data profiling available)\n\nCREATE TABLE customers (\n    customer_id   INTEGER PRIMARY KEY,\n    name          TEXT    NOT NULL,\n    country       TEXT    NOT NULL,\n    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC\n);\n\nCREATE TABLE marketing_spend (\n    spend_date  TEXT    NOT NULL,\n    channel     TEXT    NOT NULL,\n    spend_cents INTEGER NOT NULL,\n    PRIMARY KEY (spend_date, channel)\n);\n\nCREATE TABLE order_items (\n    order_item_id    INTEGER PRIMARY KEY,\n    order_id         INTEGER NOT NULL REFERENCES orders(order_id),\n    product_id       INTEGER NOT NULL REFERENCES products(product_id),\n    quantity         INTEGER NOT NULL,\n    unit_price_cents INTEGER NOT NULL\n);\n\nCREATE TABLE orders (\n    order_id    INTEGER PRIMARY KEY,\n    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),\n    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC\n    status      TEXT,               -- nullable on purpose\n    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'\n);\n\nCREATE TABLE payments (\n    payment_id   INTEGER PRIMARY KEY,\n    order_id     INTEGER NOT NULL REFERENCES orders(order_id),\n    amount_cents INTEGER NOT NULL,\n    paid_ts      TEXT    NOT NULL,\n    method       TEXT    NOT NULL\n);\n\nCREATE TABLE products (\n    product_id       INTEGER PRIMARY KEY,\n    name             TEXT    NOT NULL,\n    category         TEXT    NOT NULL,\n    list_price_cents INTEGER NOT NULL\n);\n\nCREATE TABLE refunds (\n    refund_id    INTEGER PRIMARY KEY,\n    order_id     INTEGER NOT NULL REFERENCES orders(order_id),\n    amount_cents INTEGER NOT NULL,\n    refund_ts    TEXT    NOT NULL,\n    reason       TEXT    NOT NULL\n);\n\nCREATE TABLE sessions (\n    session_id  INTEGER PRIMARY KEY,\n    customer_id INTEGER REFERENCES customers(customer_id),\n    session_ts  TEXT    NOT NULL,\n    channel     TEXT    NOT NULL\n);\n\nProbes you designed, and what executing them actually returned:\n(no probes were executed)\n\nAn independent recomputation was derived from the business question alone, without seeing the query under review, then executed:\n\n  sql: SELECT SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'\n  returned:\n    revenue_cents\n    -------------\n    5468920000   \n\n  the query under review returned:\n    revenue_cents\n    -------------\n    7301960000   \n\nDecide the verdict from what was executed, not from how the SQL looks.\n\n* The recomputation above is the strongest evidence available. If it returns a\n  different number from the query under review, the two disagree and the\n  reported number cannot be trusted. If it returns the same number, two\n  independent derivations agree.\n* Judge against the business question. Joining to a finer grain is a bug when\n  the requested metric is coarser, and correct when the metric genuinely lives\n  at that finer grain.\n* If you answer BUG, corrected_sql is mandatory and will be executed.\n\nReply with one JSON object and nothing else:\n\n{\n  \"verdict\": \"CLEAN\" | \"BUG\" | \"ESCALATE\",\n  \"bug_type\": one of [\"fanout_join\", \"null_swallowing_predicate\", \"left_join_degraded_to_inner\", \"date_range_truncation\", \"timezone_day_boundary\", \"mixed_unit_aggregation\", \"missing_filter\", \"wrong_aggregation_grain\", \"other\"] or null,\n  \"confidence\": number between 0 and 1,\n  \"explanation\": \"at most 3 sentences, concrete, naming the tables involved\",\n  \"corrected_sql\": \"a single SELECT that answers the business question, or null\"\n}\n\nVerdict meanings:\n  CLEAN     - the query correctly answers the business question.\n  BUG       - the query runs but returns a number that does not answer the\n              business question. Set bug_type and corrected_sql.\n  ESCALATE  - answering needs a business decision you cannot make from the\n              schema and data alone. Use this instead of guessing.\n\nJudge the query against the business question, not against style. A join to a\nfiner grain is a bug when the metric is coarser, and correct when the metric\nactually lives at that finer grain."
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 1200,
+    "seed": 7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-EI1ykaqsJOJgM9tGD4hDQahjl1tLD",
+    "object": "chat.completion",
+    "created": 1787966218,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.95,\n  \"explanation\": \"The query under review does not filter for completed orders, which is necessary to accurately capture revenue from completed orders only. The independent recomputation correctly includes this filter by checking the status of orders in the 'orders' table.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'\"\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 1015,
+      "completion_tokens": 117,
+      "total_tokens": 1132,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "service_tier": "default",
+    "system_fingerprint": "fp_8156e398b1"
+  }
+}

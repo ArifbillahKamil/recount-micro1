@@ -1,0 +1,60 @@
+{
+  "cassette_key": "e00786e1717aa4fe3b8cc87c2006e791",
+  "step": "plan",
+  "recorded_at": "2026-08-29T01:14:02Z",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a senior analytics engineer who has been burned by\nqueries that run cleanly and return the wrong number. You do not speculate: you\ndesign a measurement that would settle each suspicion."
+      },
+      {
+        "role": "user",
+        "content": "Business question the analyst asked:\nHow many units did we sell on completed orders? Return a single total.\n\nSQL that was produced and executed successfully:\nSELECT SUM(oi.quantity) AS units_sold\n            FROM orders o\n            JOIN order_items oi ON oi.order_id = o.order_id\n            JOIN payments    p  ON p.order_id  = o.order_id\n            WHERE o.status = 'completed'\n\nSCHEMA (no data profiling available)\n\nCREATE TABLE customers (\n    customer_id   INTEGER PRIMARY KEY,\n    name          TEXT    NOT NULL,\n    country       TEXT    NOT NULL,\n    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC\n);\n\nCREATE TABLE marketing_spend (\n    spend_date  TEXT    NOT NULL,\n    channel     TEXT    NOT NULL,\n    spend_cents INTEGER NOT NULL,\n    PRIMARY KEY (spend_date, channel)\n);\n\nCREATE TABLE order_items (\n    order_item_id    INTEGER PRIMARY KEY,\n    order_id         INTEGER NOT NULL REFERENCES orders(order_id),\n    product_id       INTEGER NOT NULL REFERENCES products(product_id),\n    quantity         INTEGER NOT NULL,\n    unit_price_cents INTEGER NOT NULL\n);\n\nCREATE TABLE orders (\n    order_id    INTEGER PRIMARY KEY,\n    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),\n    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC\n    status      TEXT,               -- nullable on purpose\n    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'\n);\n\nCREATE TABLE payments (\n    payment_id   INTEGER PRIMARY KEY,\n    order_id     INTEGER NOT NULL REFERENCES orders(order_id),\n    amount_cents INTEGER NOT NULL,\n    paid_ts      TEXT    NOT NULL,\n    method       TEXT    NOT NULL\n);\n\nCREATE TABLE products (\n    product_id       INTEGER PRIMARY KEY,\n    name             TEXT    NOT NULL,\n    category         TEXT    NOT NULL,\n    list_price_cents INTEGER NOT NULL\n);\n\nCREATE TABLE refunds (\n    refund_id    INTEGER PRIMARY KEY,\n    order_id     INTEGER NOT NULL REFERENCES orders(order_id),\n    amount_cents INTEGER NOT NULL,\n    refund_ts    TEXT    NOT NULL,\n    reason       TEXT    NOT NULL\n);\n\nCREATE TABLE sessions (\n    session_id  INTEGER PRIMARY KEY,\n    customer_id INTEGER REFERENCES customers(customer_id),\n    session_ts  TEXT    NOT NULL,\n    channel     TEXT    NOT NULL\n);\n\nThe query returned this result:\nunits_sold\n----------\n3648      \n\nList the specific ways this query could fail to answer the business question.\nFor each one, write a probe: a single read-only SELECT whose output would settle\nwhether that failure is actually happening in this data.\n\nA good probe measures a consequence. Compare a row count before and after a\njoin, compare COUNT(*) against COUNT(DISTINCT key), count rows excluded by a\npredicate, or compute the requested metric by an independent route and show both\nnumbers. A probe that merely re-runs the original query settles nothing.\n\nReply with one JSON object and nothing else:\n\n{\n  \"hypotheses\": [\n    {\n      \"risk\": \"one sentence, naming the tables or columns involved\",\n      \"bug_type\": one of [\"fanout_join\", \"null_swallowing_predicate\", \"left_join_degraded_to_inner\", \"date_range_truncation\", \"timezone_day_boundary\", \"mixed_unit_aggregation\", \"missing_filter\", \"wrong_aggregation_grain\", \"other\"],\n      \"probe_sql\": \"a single SELECT, no semicolon\",\n      \"settles\": \"what result would confirm this, and what would rule it out\"\n    }\n  ]\n}\n\nAt most 4 hypotheses, ordered by how likely they are given the\nmeasured facts above. If the measured facts already show a table does not fan\nout, do not propose a fan-out hypothesis about it."
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 1600,
+    "seed": 7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-EI1wBUw61mP44y3ZuY3kXQRCHbGwm",
+    "object": "chat.completion",
+    "created": 1787966059,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"hypotheses\": [\n    {\n      \"risk\": \"The join between orders and payments may include orders that are not completed due to missing payment records.\",\n      \"bug_type\": \"missing_filter\",\n      \"probe_sql\": \"SELECT COUNT(*) FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND p.order_id IS NULL\",\n      \"settles\": \"A count greater than 0 would confirm this issue, while a count of 0 would rule it out.\"\n    },\n    {\n      \"risk\": \"The join between orders and order_items may include orders that are not completed due to missing order items.\",\n      \"bug_type\": \"missing_filter\",\n      \"probe_sql\": \"SELECT COUNT(*) FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' AND oi.order_id IS NULL\",\n      \"settles\": \"A count greater than 0 would confirm this issue, while a count of 0 would rule it out.\"\n    },\n    {\n      \"risk\": \"The query may be counting units sold from orders that have been refunded.\",\n      \"bug_type\": \"other\",\n      \"probe_sql\": \"SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.order_id IS NULL\",\n      \"settles\": \"If this sum is less than 3648, it would confirm that refunds are affecting the count, while if it matches or exceeds 3648, it would rule it out.\"\n    },\n    {\n      \"risk\": \"The query may be aggregating quantities from multiple order items per order, leading to inflated counts if orders are duplicated in the join.\",\n      \"bug_type\": \"fanout_join\",\n      \"probe_sql\": \"SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, SUM(oi.quantity) AS total_units FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'\",\n      \"settles\": \"If the distinct_orders count is significantly lower than the total_units divided by the average number of items per order, it would confirm this issue, while a close match would rule it out.\"\n    }\n  ]\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 825,
+      "completion_tokens": 482,
+      "total_tokens": 1307,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "service_tier": "default",
+    "system_fingerprint": "fp_d26e8aed44"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "cassette_key": "da74922cd79e886b81abcb8c114259eb",
+  "step": "adjudicate",
+  "recorded_at": "2026-08-29T01:15:49Z",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a senior analytics engineer signing off on\nwhether a number can go into a business report. You have executed probes and an\nindependent recomputation, and you now decide based on what they returned."
+      },
+      {
+        "role": "user",
+        "content": "Business question the analyst asked:\nHow many orders were placed on 31 January 2026 on the Asia/Jakarta calendar (UTC+7)? Finance reports on local days.\n\nSQL under review:\nSELECT COUNT(*) AS orders_on_day\n            FROM orders\n            WHERE date(order_ts) = '2026-01-31'\n\nResult it returned:\norders_on_day\n-------------\n12           \n\nMEASURED WAREHOUSE FACTS\n\nJoin cardinality (measured, not inferred):\n  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row\n  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row\n  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row\n    refunds.order_id -> orders.order_id: one row per parent (safe to join)\n\norders: 1500 rows, one row per order_id\n  order_id: INTEGER, pk, 1500 distinct\n  customer_id: INTEGER, 389 distinct\n  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00\n  status: TEXT, NULL in 80 rows (5.3%), 4 distinct\n  currency: TEXT, 2 distinct\n\nProbes you designed, and what executing them actually returned:\n(no probes were executed)\n\nAn independent recomputation was derived from the business question alone, without seeing the query under review, then executed:\n\n  sql: SELECT COUNT(*) AS orders_on_day FROM orders WHERE DATE(order_ts, 'localtime') = '2026-01-31'\n  returned:\n    orders_on_day\n    -------------\n    19           \n\n  the query under review returned:\n    orders_on_day\n    -------------\n    12           \n\nDecide the verdict from what was executed, not from how the SQL looks.\n\n* The recomputation above is the strongest evidence available. If it returns a\n  different number from the query under review, the two disagree and the\n  reported number cannot be trusted. If it returns the same number, two\n  independent derivations agree.\n* Judge against the business question. Joining to a finer grain is a bug when\n  the requested metric is coarser, and correct when the metric genuinely lives\n  at that finer grain.\n* If you answer BUG, corrected_sql is mandatory and will be executed.\n\nReply with one JSON object and nothing else:\n\n{\n  \"verdict\": \"CLEAN\" | \"BUG\" | \"ESCALATE\",\n  \"bug_type\": one of [\"fanout_join\", \"null_swallowing_predicate\", \"left_join_degraded_to_inner\", \"date_range_truncation\", \"timezone_day_boundary\", \"mixed_unit_aggregation\", \"missing_filter\", \"wrong_aggregation_grain\", \"other\"] or null,\n  \"confidence\": number between 0 and 1,\n  \"explanation\": \"at most 3 sentences, concrete, naming the tables involved\",\n  \"corrected_sql\": \"a single SELECT that answers the business question, or null\"\n}\n\nVerdict meanings:\n  CLEAN     - the query correctly answers the business question.\n  BUG       - the query runs but returns a number that does not answer the\n              business question. Set bug_type and corrected_sql.\n  ESCALATE  - answering needs a business decision you cannot make from the\n              schema and data alone. Use this instead of guessing.\n\nJudge the query against the business question, not against style. A join to a\nfiner grain is a bug when the metric is coarser, and correct when the metric\nactually lives at that finer grain."
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 1200,
+    "seed": 7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-EI1xwuZ9acsb8y6GSuFa4HUEPTlnd",
+    "object": "chat.completion",
+    "created": 1787966168,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"timezone_day_boundary\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review does not account for the local timezone (Asia/Jakarta, UTC+7) when filtering the order timestamps. The independent recomputation correctly adjusts for the local time, resulting in a different count of orders.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS orders_on_day FROM orders WHERE DATE(order_ts, 'localtime') = '2026-01-31'\"\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 865,
+      "completion_tokens": 114,
+      "total_tokens": 979,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "service_tier": "default",
+    "system_fingerprint": "fp_98f538dc1a"
+  }
+}

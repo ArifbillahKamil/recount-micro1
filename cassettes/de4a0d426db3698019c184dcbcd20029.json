@@ -1,0 +1,60 @@
+{
+  "cassette_key": "de4a0d426db3698019c184dcbcd20029",
+  "step": "recompute",
+  "recorded_at": "2026-08-29T01:13:14Z",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a senior analytics engineer. You are handed a\nbusiness question and the measured facts about a warehouse, and you write the\nquery that answers it. You are not reviewing anyone's work: you are deriving the\nanswer independently."
+      },
+      {
+        "role": "user",
+        "content": "Business question:\nFor completed orders, how many orders are there and how much did we capture in total?\n\nMEASURED WAREHOUSE FACTS\n\nJoin cardinality (measured, not inferred):\n  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row\n  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row\n  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row\n    refunds.order_id -> orders.order_id: one row per parent (safe to join)\n\norders: 1500 rows, one row per order_id\n  order_id: INTEGER, pk, 1500 distinct\n  customer_id: INTEGER, 389 distinct\n  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00\n  status: TEXT, NULL in 80 rows (5.3%), 4 distinct\n  currency: TEXT, 2 distinct\n\npayments: 1683 rows, one row per payment_id\n  payment_id: INTEGER, pk, 1683 distinct\n  order_id: INTEGER, 1357 distinct\n  amount_cents: INTEGER, 941 distinct\n  paid_ts: TEXT, 1672 distinct, range 2026-01-01 03:12:00 .. 2026-05-30 03:21:00\n  method: TEXT, 4 distinct\n\nWrite a single read-only SQL query that answers this question against this\nSQLite warehouse.\n\nDerive it from the question and the measured facts above. Pay attention to the\ngrain of each measure, to columns that are nullable in practice, and to whether\na join fans out.\n\nReturn exactly these columns, in this order, with these names:\norders_seen, captured_cents\n\nReply with one JSON object and nothing else:\n\n{\"sql\": \"a single SELECT, no semicolon\", \"reasoning\": \"one sentence on the grain and filters you chose\"}"
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 1200,
+    "seed": 7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-EI1vRusXgVfxexETGDLbE4B6PQwO1",
+    "object": "chat.completion",
+    "created": 1787966013,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\"sql\": \"SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL\", \"reasoning\": \"The query counts distinct completed orders and sums the payment amounts, ensuring only orders with a non-null status are included.\"}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 534,
+      "completion_tokens": 77,
+      "total_tokens": 611,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "service_tier": "default",
+    "system_fingerprint": "fp_5259353f0d"
+  }
+}
