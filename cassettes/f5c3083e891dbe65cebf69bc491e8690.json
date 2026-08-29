@@ -1,7 +1,7 @@
 {
   "cassette_key": "f5c3083e891dbe65cebf69bc491e8690",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:30:18Z",
+  "recorded_at": "2026-08-29T01:53:19Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2BxU493Xy1TJJjlI8PrvAtfnXDC",
+    "id": "chatcmpl-EI2YEKcv5edSTdox71FVFaG721T6U",
     "object": "chat.completion",
-    "created": 1787967037,
+    "created": 1787968418,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review only filters for completed orders, while the independent recomputation includes all orders with a non-null status. This discrepancy in filtering leads to a significant difference in the reported units sold from the two queries.\",\n  \"corrected_sql\": \"SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review only counts units from completed orders, while the independent recomputation includes all orders with non-null status. This discrepancy indicates that the filter for completed orders is likely excluding relevant data.\",\n  \"corrected_sql\": \"SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 964,
-      "completion_tokens": 116,
-      "total_tokens": 1080,
+      "completion_tokens": 112,
+      "total_tokens": 1076,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0
@@ -55,6 +55,6 @@
       }
     },
     "service_tier": "default",
-    "system_fingerprint": "fp_f92f00b8af"
+    "system_fingerprint": "fp_5b6abc5941"
   }
 }

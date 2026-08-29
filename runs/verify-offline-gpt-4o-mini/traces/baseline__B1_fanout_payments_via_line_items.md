@@ -1,6 +1,6 @@
 # Trajectory — baseline — B1_fanout_payments_via_line_items
 
-`1` model calls (`1` replayed from cassette) · `0` tool calls · `939` tokens · `$0.00020`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `934` tokens · `$0.00020`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · replayed · 806 in / 133 out · 0.00s
+`gpt-4o-mini` · replayed · 806 in / 128 out · 0.00s
 
 **system**
 
@@ -131,14 +131,14 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "wrong_aggregation_grain",
   "confidence": 0.9,
-  "explanation": "The query sums the payment amounts for completed orders, but it also joins with the order_items table, which introduces a fanout effect. This can lead to over-counting the payments if there are multiple items per order, as each payment will be counted for each item in the order.",
+  "explanation": "The query sums the payment amounts for completed orders, but it also joins with the order_items table, which introduces a fanout effect. This means that if an order has multiple items, the payment amount will be counted multiple times, leading to an inflated total.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```
 
 ## 3. gate · final
 
-**BUG** — The query sums the payment amounts for completed orders, but it also joins with the order_items table, which introduces a fanout effect. This can lead to over-counting the payments if there are multiple items per order, as each payment will be counted for each item in the order.
+**BUG** — The query sums the payment amounts for completed orders, but it also joins with the order_items table, which introduces a fanout effect. This means that if an order has multiple items, the payment amount will be counted multiple times, leading to an inflated total.
 
 ```json
 {

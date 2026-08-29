@@ -1,7 +1,7 @@
 {
   "cassette_key": "9e995638ed67470260dc53d327fe02ef",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:30:11Z",
+  "recorded_at": "2026-08-29T01:53:08Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2Bp2DMtnEbEateTeKXyzj0SYGuF",
+    "id": "chatcmpl-EI2Y3yiRVlb1LwYWvL4IOg6TM8usn",
     "object": "chat.completion",
-    "created": 1787967029,
+    "created": 1787968407,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"date_range_truncation\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review counts orders based on the date of the timestamp, but it does not account for the local timezone of Asia/Jakarta (UTC+7). The independent recomputation correctly considers the full date range for the local day, resulting in a discrepancy in the count.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"date_range_truncation\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review counts orders based on the date of the timestamp, but it does not account for the local timezone of Asia/Jakarta (UTC+7). The independent recomputation correctly filters orders within the specified date range, resulting in a different count.\",\n  \"corrected_sql\": \"SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 889,
-      "completion_tokens": 150,
-      "total_tokens": 1039,
+      "completion_tokens": 146,
+      "total_tokens": 1035,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

@@ -1,6 +1,6 @@
 # Trajectory — recount — C4_clean_half_open_date_range
 
-`3` model calls (`3` replayed from cassette) · `7` tool calls · `2848` tokens · `$0.00072`
+`2` model calls (`2` replayed from cassette) · `3` tool calls · `1857` tokens · `$0.00036`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -22,7 +22,11 @@ january_orders
 551           
 ```
 
-## 2. tool · `profiler.profile` · profile_warehouse · ok
+## 2. note · profile_disabled
+
+Warehouse profiling disabled; both roles see the schema only.
+
+## 3. tool · `profiler.format_hints` · value_formats · ok
 
 **request**
 
@@ -30,10 +34,6 @@ january_orders
 {
   "tables": [
     "orders"
-  ],
-  "views": [
-    "reviewer",
-    "author"
   ]
 }
 ```
@@ -41,25 +41,16 @@ january_orders
 **response**
 
 ```
-MEASURED WAREHOUSE FACTS
+STORED VALUE FORMATS
 
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
+Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
 ```
 
-## 3. model · recompute
+## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 354 in / 84 out · 0.00s
+`gpt-4o-mini` · replayed · 654 in / 82 out · 0.00s
 
 **system**
 
@@ -76,16 +67,73 @@ answer independently.
 Business question:
 How many orders were placed during January 2026, in UTC?
 
-MEASURED COLUMN FACTS
+SCHEMA
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
-  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
-  currency: TEXT, 2 distinct
+CREATE TABLE customers (
+    customer_id   INTEGER PRIMARY KEY,
+    name          TEXT    NOT NULL,
+    country       TEXT    NOT NULL,
+    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC
+);
 
-Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
+CREATE TABLE marketing_spend (
+    spend_date  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL,
+    spend_cents INTEGER NOT NULL,
+    PRIMARY KEY (spend_date, channel)
+);
+
+CREATE TABLE order_items (
+    order_item_id    INTEGER PRIMARY KEY,
+    order_id         INTEGER NOT NULL REFERENCES orders(order_id),
+    product_id       INTEGER NOT NULL REFERENCES products(product_id),
+    quantity         INTEGER NOT NULL,
+    unit_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE orders (
+    order_id    INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC
+    status      TEXT,               -- nullable on purpose
+    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'
+);
+
+CREATE TABLE payments (
+    payment_id   INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    paid_ts      TEXT    NOT NULL,
+    method       TEXT    NOT NULL
+);
+
+CREATE TABLE products (
+    product_id       INTEGER PRIMARY KEY,
+    name             TEXT    NOT NULL,
+    category         TEXT    NOT NULL,
+    list_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE refunds (
+    refund_id    INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    refund_ts    TEXT    NOT NULL,
+    reason       TEXT    NOT NULL
+);
+
+CREATE TABLE sessions (
+    session_id  INTEGER PRIMARY KEY,
+    customer_id INTEGER REFERENCES customers(customer_id),
+    session_ts  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL
+);
+
+STORED VALUE FORMATS
+
+  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
+
+Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
@@ -105,195 +153,32 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL", "reasoning": "I counted the order_id for orders placed in January 2026, ensuring to filter out any NULL statuses."}
+{"sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'", "reasoning": "I filtered the orders based on the order_ts to count only those placed in January 2026, ensuring the correct time range in UTC."}
 ```
 
-## 4. tool · `run_sql` · recompute · ok
+## 5. tool · `run_sql` · recompute · ok
 
 **request**
 
 ```sql
-SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
+SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'
 ```
 
 **response**
 
 ```
-january_orders
---------------
-520           
-```
-
-## 5. model · plan
-
-`gpt-4o-mini` · replayed · 655 in / 428 out · 0.00s
-
-**system**
-
-```
-You are a senior analytics engineer who has been burned by
-queries that run cleanly and return the wrong number. You do not speculate: you
-design a measurement that would settle each suspicion.
-```
-
-**user**
-
-```
-Business question the analyst asked:
-How many orders were placed during January 2026, in UTC?
-
-SQL that was produced and executed successfully:
-SELECT COUNT(*) AS january_orders
-            FROM orders
-            WHERE order_ts >= '2026-01-01' AND order_ts < '2026-02-01'
-
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
-
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
-
-The query returned this result:
 january_orders
 --------------
 551           
-
-List the specific ways this query could fail to answer the business question.
-For each one, write a probe: a single read-only SELECT whose output would settle
-whether that failure is actually happening in this data.
-
-A good probe measures a consequence. Compare a row count before and after a
-join, compare COUNT(*) against COUNT(DISTINCT key), count rows excluded by a
-predicate, or compute the requested metric by an independent route and show both
-numbers. A probe that merely re-runs the original query settles nothing.
-
-Reply with one JSON object and nothing else:
-
-{
-  "hypotheses": [
-    {
-      "risk": "one sentence, naming the tables or columns involved",
-      "bug_type": one of ["fanout_join", "null_swallowing_predicate", "left_join_degraded_to_inner", "date_range_truncation", "timezone_day_boundary", "mixed_unit_aggregation", "missing_filter", "wrong_aggregation_grain", "other"],
-      "probe_sql": "a single SELECT, no semicolon",
-      "settles": "what result would confirm this, and what would rule it out"
-    }
-  ]
-}
-
-At most 4 hypotheses, ordered by how likely they are given the
-measured facts above. If the measured facts already show a table does not fan
-out, do not propose a fan-out hypothesis about it.
 ```
 
-**assistant**
+## 6. note · probes_disabled
 
-```json
-{
-  "hypotheses": [
-    {
-      "risk": "The order_ts column may contain NULL values that are not counted in the total",
-      "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS total_orders, COUNT(order_ts) AS counted_orders FROM orders",
-      "settles": "If total_orders is greater than counted_orders, it confirms the issue; if they are equal, it rules it out."
-    },
-    {
-      "risk": "The order_ts values may not be in UTC, leading to incorrect date filtering",
-      "bug_type": "timezone_day_boundary",
-      "probe_sql": "SELECT COUNT(*) AS january_orders_utc FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'",
-      "settles": "If january_orders_utc is different from 551, it confirms the issue; if it matches, it rules it out."
-    },
-    {
-      "risk": "The date range may not include all orders due to incorrect timestamp format or truncation",
-      "bug_type": "date_range_truncation",
-      "probe_sql": "SELECT MIN(order_ts) AS min_order_ts, MAX(order_ts) AS max_order_ts FROM orders",
-      "settles": "If the min_order_ts is after '2026-01-01' or the max_order_ts is before '2026-02-01', it confirms the issue; if both are within range, it rules it out."
-    },
-    {
-      "risk": "The query may not account for orders with a status that excludes them from the count",
-      "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) AS total_orders_with_status FROM orders WHERE status IS NOT NULL",
-      "settles": "If total_orders_with_status is less than 1500, it confirms the issue; if it matches, it rules it out."
-    }
-  ]
-}
-```
+Probe stage disabled for this run; adjudicating from measured facts alone.
 
-## 6. tool · `run_sql` · probe_1 · ok
+## 7. model · adjudicate
 
-**request**
-
-```sql
-SELECT COUNT(*) AS total_orders, COUNT(order_ts) AS counted_orders FROM orders
-```
-
-**response**
-
-```
-total_orders | counted_orders
--------------+---------------
-1500         | 1500          
-```
-
-## 7. tool · `run_sql` · probe_2 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) AS january_orders_utc FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'
-```
-
-**response**
-
-```
-january_orders_utc
-------------------
-557               
-```
-
-## 8. tool · `run_sql` · probe_3 · ok
-
-**request**
-
-```sql
-SELECT MIN(order_ts) AS min_order_ts, MAX(order_ts) AS max_order_ts FROM orders
-```
-
-**response**
-
-```
-min_order_ts        | max_order_ts       
---------------------+--------------------
-2026-01-01 02:11:00 | 2026-03-31 21:27:00
-```
-
-## 9. tool · `run_sql` · probe_4 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) AS total_orders_with_status FROM orders WHERE status IS NOT NULL
-```
-
-**response**
-
-```
-total_orders_with_status
-------------------------
-1420                    
-```
-
-## 10. model · adjudicate
-
-`gpt-4o-mini` · replayed · 1186 in / 141 out · 0.00s
+`gpt-4o-mini` · replayed · 1020 in / 101 out · 0.00s
 
 **system**
 
@@ -319,57 +204,78 @@ january_orders
 --------------
 551           
 
-MEASURED WAREHOUSE FACTS
+SCHEMA
 
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+CREATE TABLE customers (
+    customer_id   INTEGER PRIMARY KEY,
+    name          TEXT    NOT NULL,
+    country       TEXT    NOT NULL,
+    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC
+);
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
+CREATE TABLE marketing_spend (
+    spend_date  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL,
+    spend_cents INTEGER NOT NULL,
+    PRIMARY KEY (spend_date, channel)
+);
+
+CREATE TABLE order_items (
+    order_item_id    INTEGER PRIMARY KEY,
+    order_id         INTEGER NOT NULL REFERENCES orders(order_id),
+    product_id       INTEGER NOT NULL REFERENCES products(product_id),
+    quantity         INTEGER NOT NULL,
+    unit_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE orders (
+    order_id    INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC
+    status      TEXT,               -- nullable on purpose
+    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'
+);
+
+CREATE TABLE payments (
+    payment_id   INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    paid_ts      TEXT    NOT NULL,
+    method       TEXT    NOT NULL
+);
+
+CREATE TABLE products (
+    product_id       INTEGER PRIMARY KEY,
+    name             TEXT    NOT NULL,
+    category         TEXT    NOT NULL,
+    list_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE refunds (
+    refund_id    INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    refund_ts    TEXT    NOT NULL,
+    reason       TEXT    NOT NULL
+);
+
+CREATE TABLE sessions (
+    session_id  INTEGER PRIMARY KEY,
+    customer_id INTEGER REFERENCES customers(customer_id),
+    session_ts  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL
+);
 
 Probes you designed, and what executing them actually returned:
-[1] risk: The order_ts column may contain NULL values that are not counted in the total
-    probe: SELECT COUNT(*) AS total_orders, COUNT(order_ts) AS counted_orders FROM orders
-    returned:
-    total_orders | counted_orders
-    -------------+---------------
-    1500         | 1500          
-
-[2] risk: The order_ts values may not be in UTC, leading to incorrect date filtering
-    probe: SELECT COUNT(*) AS january_orders_utc FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'
-    returned:
-    january_orders_utc
-    ------------------
-    557               
-
-[3] risk: The date range may not include all orders due to incorrect timestamp format or truncation
-    probe: SELECT MIN(order_ts) AS min_order_ts, MAX(order_ts) AS max_order_ts FROM orders
-    returned:
-    min_order_ts        | max_order_ts       
-    --------------------+--------------------
-    2026-01-01 02:11:00 | 2026-03-31 21:27:00
-
-[4] risk: The query may not account for orders with a status that excludes them from the count
-    probe: SELECT COUNT(*) AS total_orders_with_status FROM orders WHERE status IS NOT NULL
-    returned:
-    total_orders_with_status
-    ------------------------
-    1420                    
+(no probes were executed)
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
+  sql: SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'
   returned:
     january_orders
     --------------
-    520           
+    551           
 
   the query under review returned:
     january_orders
@@ -413,14 +319,14 @@ actually lives at that finer grain.
 
 ```json
 {
-  "verdict": "BUG",
-  "bug_type": "missing_filter",
-  "confidence": 0.9,
-  "explanation": "The query under review does not filter out orders with a NULL status, which affects the count. The independent recomputation correctly includes this filter and returns a different count. The discrepancy indicates that the original query does not accurately reflect the business question.",
-  "corrected_sql": "SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL"
+  "verdict": "CLEAN",
+  "bug_type": null,
+  "confidence": 1,
+  "explanation": "The query correctly counts the number of orders placed in January 2026 by filtering on the 'order_ts' column in the 'orders' table. Both the query under review and the independent recomputation returned the same result of 551 orders. The date range specified in the query aligns with the business question.",
+  "corrected_sql": null
 }
 ```
 
-## 11. gate · verification_gate
+## 8. gate · verification_gate
 
-**BUG** — gate disabled for this run; the model's verdict is accepted as-is
+**CLEAN** — gate disabled for this run; the model's verdict is accepted as-is

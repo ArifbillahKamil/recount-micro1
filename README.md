@@ -252,23 +252,23 @@ Recorded with `gpt-4o-mini` on the 12 bundled cases. Both systems received the s
 
 | metric | baseline | Recount | change |
 |---|---|---|---|
-| **Recall on planted faults** | 88% (7/8) | **100%** (8/8) | +12 pt |
-| F1 | 93% | 84% | -9 pt |
-| Precision | 100% | 73% | -27 pt |
-| False alarms on the 4 correct queries (lower is better) | 0/4 | 3/4 | +75 pt |
-| Repair accuracy | 7/8 | 5/8 | -25 pt |
-| Bug type named correctly | 43% | 50% | +7 pt |
-| Cost per case | $0.00019 | $0.00077 | x4.1 |
-| Wall clock per case | 2.4s | 8.4s | - |
-| Model calls / tool calls | 12 / 0 | 36 / 84 | - |
+| **Recall on planted faults** | 88% (7/8) | **88%** (7/8) | +0 pt |
+| F1 | 93% | 93% | +0 pt |
+| Precision | 100% | 100% | +0 pt |
+| False alarms on the 4 correct queries (lower is better) | 0/4 | 0/4 | +0 pt |
+| Repair accuracy | 7/8 | 7/8 | +0 pt |
+| Bug type named correctly | 29% | 29% | +0 pt |
+| Cost per case | $0.00019 | $0.00037 | x2.0 |
+| Wall clock per case | 2.1s | 2.7s | - |
+| Model calls / tool calls | 12 / 0 | 24 / 36 | - |
 
 ### Reading this honestly
 
 **Recall is the claim worth defending.** The baseline reported 1 of 8 planted faults as correct. Recount reported none as correct. On the stated problem -- a wrong number reaching a report without anyone noticing -- that is the difference that matters.
 
-**The F1 difference is not.** 93% against 84% is a gap of 9 points on 12 cases, where a single case moves F1 by roughly 8 points and the false alarm rate by 25. It is inside the noise of this sample and is reported rather than leaned on. Twelve cases can show that a mechanism works; they cannot rank two systems that are close.
+**The F1 difference is not.** 93% against 93% is a gap of 0 points on 12 cases, where a single case moves F1 by roughly 8 points and the false alarm rate by 25. It is inside the noise of this sample and is reported rather than leaned on. Twelve cases can show that a mechanism works; they cannot rank two systems that are close.
 
-**Cost is a real trade.** Recount costs x4.1 the baseline and takes x3.5 the wall clock, because it executes queries instead of reading them. At a fraction of a cent per verified metric that is worth paying; it is still a cost, not a rounding error to hide.
+**Cost is a real trade.** Recount costs x2.0 the baseline and takes x1.3 the wall clock, because it executes queries instead of reading them. At a fraction of a cent per verified metric that is worth paying; it is still a cost, not a rounding error to hide.
 
 Full per-case tables, including every explanation, are in [`runs/main-gpt-4o-mini/results.md`](runs/main-gpt-4o-mini/results.md). Trajectories for all 24 runs are in [`runs/main-gpt-4o-mini/traces/`](runs/main-gpt-4o-mini/traces/) -- see [TRAJECTORIES.md](TRAJECTORIES.md).
 <!-- RESULTS:END -->
@@ -288,7 +288,7 @@ Each row is a real run. The evidence column is generated from `runs/*/results.js
 | **Iteration 1**<br>profiler + probes + gate | The original design. Measure the warehouse, let the agent write and run diagnostic probes, then require a bug claim to ship a correction whose effect is checked. | F1 75%, recall 75%, 2/4 false alarms, 6/8 repairs, $0.00063/case (`80020a6`, `runs/ablation-no-recompute-…`) | **Lost to the baseline by 18 points.** Kept the components, questioned the architecture. |
 | **Iteration 2**<br>independent recomputation | The gate could only ever downgrade a bug claim, so it was structurally unable to catch a real fault waved through -- and B1 and B4 were. Added a stage that answers the question from scratch, without seeing the query under review, then compares the two numbers. | F1 89%, recall 100%, 2/4 false alarms, 8/8 repairs, $0.00076/case (`80020a6`, `runs/main-…`) | **Kept.** Recall 75% -> 100%. This is the one change that worked. |
 | **Iteration 3**<br>profile split by role | Ablations showed the profiler was hurting. The hypothesis was that reviewers need join cardinality while authors need types and formats, so the digest was split. | F1 84%, recall 100%, 3/4 false alarms, 5/8 repairs, $0.00077/case (`2666905`, `runs/main-…`) | **Removed.** It got worse. The trace showed the author writing `WHERE status IS NOT NULL` where the question required `WHERE status = 'completed'` -- the NULL warning displaced the required filter instead of adding to it. |
-| **Iteration 4**<br>formats only, profiler and probes deleted | If naming a hazard makes an author defend against it, give it no hazards: only how values are stored. The warehouse profiler and the probe loop were removed from the reported path. | F1 84%, recall 100%, 3/4 false alarms, 5/8 repairs, $0.00077/case | **Final.** This is the configuration reported above. |
+| **Iteration 4**<br>formats only, profiler and probes deleted | If naming a hazard makes an author defend against it, give it no hazards: only how values are stored. The warehouse profiler and the probe loop were removed from the reported path. | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00037/case | **Final.** This is the configuration reported above. |
 
 ### What each component is worth
 
@@ -296,10 +296,11 @@ Measured against the reported configuration, on the same cases and the same mode
 
 | variant | what it changes | result |
 |---|---|---|
-| `--no-recompute` | Remove the recomputation — the only stage that earns its place | F1 75%, recall 75%, 2/4 false alarms, 4/8 repairs, $0.00064/case |
-| `--no-gate` | Accept the model verdict as-is — what the gate is worth once recomputation exists | F1 84%, recall 100%, 3/4 false alarms, 5/8 repairs, $0.00077/case |
-
-> Not yet recorded: `no-formats`, `add-profile`, `add-probes`. Produce them with `python3 run_all.py --model gpt-4o-mini`.
+| `--no-recompute` | Remove the recomputation — the only stage that earns its place | F1 67%, recall 50%, 0/4 false alarms, 4/8 repairs, $0.00021/case |
+| `--no-gate` | Accept the model verdict as-is — what the gate is worth once recomputation exists | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00037/case |
+| `--no-formats` | Withhold stored value formats — whether the format hint is load-bearing | F1 94%, recall 100%, 1/4 false alarms, 6/8 repairs, $0.00036/case |
+| `--add-profile` | Put the warehouse profiler back — why it was removed | F1 84%, recall 100%, 3/4 false alarms, 6/8 repairs, $0.00035/case |
+| `--add-probes` | Put the probe loop back — why it was removed | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00082/case |
 <!-- CHANGELOG:END -->
 
 ---

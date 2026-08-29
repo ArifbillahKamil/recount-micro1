@@ -1,6 +1,6 @@
 # Trajectory — recount — B6_timezone_day_misattribution
 
-`3` model calls (`0` replayed from cassette) · `7` tool calls · `3007` tokens · `$0.00078`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1888` tokens · `$0.00037`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -22,7 +22,11 @@ orders_on_day
 12           
 ```
 
-## 2. tool · `profiler.profile` · profile_warehouse · ok
+## 2. note · profile_disabled
+
+Warehouse profiling disabled; both roles see the schema only.
+
+## 3. tool · `profiler.format_hints` · value_formats · ok
 
 **request**
 
@@ -30,10 +34,6 @@ orders_on_day
 {
   "tables": [
     "orders"
-  ],
-  "views": [
-    "reviewer",
-    "author"
   ]
 }
 ```
@@ -41,25 +41,16 @@ orders_on_day
 **response**
 
 ```
-MEASURED WAREHOUSE FACTS
+STORED VALUE FORMATS
 
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
+Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
 ```
 
-## 3. model · recompute
+## 4. model · recompute
 
-`gpt-4o-mini` · live call · 369 in / 92 out · 1.80s
+`gpt-4o-mini` · live call · 669 in / 91 out · 1.63s
 
 **system**
 
@@ -76,16 +67,73 @@ answer independently.
 Business question:
 How many orders were placed on 31 January 2026 on the Asia/Jakarta calendar (UTC+7)? Finance reports on local days.
 
-MEASURED COLUMN FACTS
+SCHEMA
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
-  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
-  currency: TEXT, 2 distinct
+CREATE TABLE customers (
+    customer_id   INTEGER PRIMARY KEY,
+    name          TEXT    NOT NULL,
+    country       TEXT    NOT NULL,
+    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC
+);
 
-Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
+CREATE TABLE marketing_spend (
+    spend_date  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL,
+    spend_cents INTEGER NOT NULL,
+    PRIMARY KEY (spend_date, channel)
+);
+
+CREATE TABLE order_items (
+    order_item_id    INTEGER PRIMARY KEY,
+    order_id         INTEGER NOT NULL REFERENCES orders(order_id),
+    product_id       INTEGER NOT NULL REFERENCES products(product_id),
+    quantity         INTEGER NOT NULL,
+    unit_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE orders (
+    order_id    INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC
+    status      TEXT,               -- nullable on purpose
+    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'
+);
+
+CREATE TABLE payments (
+    payment_id   INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    paid_ts      TEXT    NOT NULL,
+    method       TEXT    NOT NULL
+);
+
+CREATE TABLE products (
+    product_id       INTEGER PRIMARY KEY,
+    name             TEXT    NOT NULL,
+    category         TEXT    NOT NULL,
+    list_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE refunds (
+    refund_id    INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    refund_ts    TEXT    NOT NULL,
+    reason       TEXT    NOT NULL
+);
+
+CREATE TABLE sessions (
+    session_id  INTEGER PRIMARY KEY,
+    customer_id INTEGER REFERENCES customers(customer_id),
+    session_ts  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL
+);
+
+STORED VALUE FORMATS
+
+  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
+
+Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
@@ -105,195 +153,32 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL", "reasoning": "I filtered the orders based on the timestamp range for 31 January 2026 in the Asia/Jakarta timezone and excluded any orders with a NULL status."}
+{"sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'", "reasoning": "I filtered the orders based on the order_ts to count only those placed on 31 January 2026 in the Asia/Jakarta timezone, which corresponds to the UTC range specified."}
 ```
 
-## 4. tool · `run_sql` · recompute · ok
+## 5. tool · `run_sql` · recompute · ok
 
 **request**
 
 ```sql
-SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
+SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'
 ```
 
 **response**
 
 ```
-orders_on_day
--------------
-11           
-```
-
-## 5. model · plan
-
-`gpt-4o-mini` · live call · 661 in / 482 out · 5.06s
-
-**system**
-
-```
-You are a senior analytics engineer who has been burned by
-queries that run cleanly and return the wrong number. You do not speculate: you
-design a measurement that would settle each suspicion.
-```
-
-**user**
-
-```
-Business question the analyst asked:
-How many orders were placed on 31 January 2026 on the Asia/Jakarta calendar (UTC+7)? Finance reports on local days.
-
-SQL that was produced and executed successfully:
-SELECT COUNT(*) AS orders_on_day
-            FROM orders
-            WHERE date(order_ts) = '2026-01-31'
-
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
-
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
-
-The query returned this result:
 orders_on_day
 -------------
 12           
-
-List the specific ways this query could fail to answer the business question.
-For each one, write a probe: a single read-only SELECT whose output would settle
-whether that failure is actually happening in this data.
-
-A good probe measures a consequence. Compare a row count before and after a
-join, compare COUNT(*) against COUNT(DISTINCT key), count rows excluded by a
-predicate, or compute the requested metric by an independent route and show both
-numbers. A probe that merely re-runs the original query settles nothing.
-
-Reply with one JSON object and nothing else:
-
-{
-  "hypotheses": [
-    {
-      "risk": "one sentence, naming the tables or columns involved",
-      "bug_type": one of ["fanout_join", "null_swallowing_predicate", "left_join_degraded_to_inner", "date_range_truncation", "timezone_day_boundary", "mixed_unit_aggregation", "missing_filter", "wrong_aggregation_grain", "other"],
-      "probe_sql": "a single SELECT, no semicolon",
-      "settles": "what result would confirm this, and what would rule it out"
-    }
-  ]
-}
-
-At most 4 hypotheses, ordered by how likely they are given the
-measured facts above. If the measured facts already show a table does not fan
-out, do not propose a fan-out hypothesis about it.
 ```
 
-**assistant**
+## 6. note · probes_disabled
 
-```json
-{
-  "hypotheses": [
-    {
-      "risk": "The order timestamps may not be correctly interpreted in the Asia/Jakarta timezone, leading to incorrect date filtering.",
-      "bug_type": "timezone_day_boundary",
-      "probe_sql": "SELECT COUNT(*) AS orders_on_day_jakarta FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'",
-      "settles": "If the result is different from 12, it confirms the timezone issue; if it is the same, the timezone is not the problem."
-    },
-    {
-      "risk": "Some orders may have a NULL status, which could affect the count if there are additional filters on status not included in the query.",
-      "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS total_orders, COUNT(status) AS orders_with_status FROM orders",
-      "settles": "If total_orders is greater than orders_with_status, it confirms that NULL statuses are present; if they are equal, this is not the issue."
-    },
-    {
-      "risk": "The order timestamps may not cover the entire day due to the time range of the data, potentially missing orders placed late in the day.",
-      "bug_type": "date_range_truncation",
-      "probe_sql": "SELECT MIN(order_ts) AS earliest_order, MAX(order_ts) AS latest_order FROM orders",
-      "settles": "If the latest_order is before '2026-01-31 23:59:59', it confirms the truncation issue; if it is after, this is not the problem."
-    },
-    {
-      "risk": "The query may not account for orders that were placed just before the end of the day in UTC, which could be counted as the next day in Jakarta.",
-      "bug_type": "timezone_day_boundary",
-      "probe_sql": "SELECT COUNT(*) AS orders_before_jakarta_day_end FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'",
-      "settles": "If this count is greater than 12, it confirms the boundary issue; if it is 12 or less, this is not the issue."
-    }
-  ]
-}
-```
+Probe stage disabled for this run; adjudicating from measured facts alone.
 
-## 6. tool · `run_sql` · probe_1 · ok
+## 7. model · adjudicate
 
-**request**
-
-```sql
-SELECT COUNT(*) AS orders_on_day_jakarta FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'
-```
-
-**response**
-
-```
-orders_on_day_jakarta
----------------------
-19                   
-```
-
-## 7. tool · `run_sql` · probe_2 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) AS total_orders, COUNT(status) AS orders_with_status FROM orders
-```
-
-**response**
-
-```
-total_orders | orders_with_status
--------------+-------------------
-1500         | 1420              
-```
-
-## 8. tool · `run_sql` · probe_3 · ok
-
-**request**
-
-```sql
-SELECT MIN(order_ts) AS earliest_order, MAX(order_ts) AS latest_order FROM orders
-```
-
-**response**
-
-```
-earliest_order      | latest_order       
---------------------+--------------------
-2026-01-01 02:11:00 | 2026-03-31 21:27:00
-```
-
-## 9. tool · `run_sql` · probe_4 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) AS orders_before_jakarta_day_end FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'
-```
-
-**response**
-
-```
-orders_before_jakarta_day_end
------------------------------
-12                           
-```
-
-## 10. model · adjudicate
-
-`gpt-4o-mini` · live call · 1245 in / 158 out · 2.40s
+`gpt-4o-mini` · live call · 1029 in / 99 out · 1.35s
 
 **system**
 
@@ -319,57 +204,78 @@ orders_on_day
 -------------
 12           
 
-MEASURED WAREHOUSE FACTS
+SCHEMA
 
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+CREATE TABLE customers (
+    customer_id   INTEGER PRIMARY KEY,
+    name          TEXT    NOT NULL,
+    country       TEXT    NOT NULL,
+    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC
+);
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
+CREATE TABLE marketing_spend (
+    spend_date  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL,
+    spend_cents INTEGER NOT NULL,
+    PRIMARY KEY (spend_date, channel)
+);
+
+CREATE TABLE order_items (
+    order_item_id    INTEGER PRIMARY KEY,
+    order_id         INTEGER NOT NULL REFERENCES orders(order_id),
+    product_id       INTEGER NOT NULL REFERENCES products(product_id),
+    quantity         INTEGER NOT NULL,
+    unit_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE orders (
+    order_id    INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC
+    status      TEXT,               -- nullable on purpose
+    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'
+);
+
+CREATE TABLE payments (
+    payment_id   INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    paid_ts      TEXT    NOT NULL,
+    method       TEXT    NOT NULL
+);
+
+CREATE TABLE products (
+    product_id       INTEGER PRIMARY KEY,
+    name             TEXT    NOT NULL,
+    category         TEXT    NOT NULL,
+    list_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE refunds (
+    refund_id    INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    refund_ts    TEXT    NOT NULL,
+    reason       TEXT    NOT NULL
+);
+
+CREATE TABLE sessions (
+    session_id  INTEGER PRIMARY KEY,
+    customer_id INTEGER REFERENCES customers(customer_id),
+    session_ts  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL
+);
 
 Probes you designed, and what executing them actually returned:
-[1] risk: The order timestamps may not be correctly interpreted in the Asia/Jakarta timezone, leading to incorrect date filtering.
-    probe: SELECT COUNT(*) AS orders_on_day_jakarta FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'
-    returned:
-    orders_on_day_jakarta
-    ---------------------
-    19                   
-
-[2] risk: Some orders may have a NULL status, which could affect the count if there are additional filters on status not included in the query.
-    probe: SELECT COUNT(*) AS total_orders, COUNT(status) AS orders_with_status FROM orders
-    returned:
-    total_orders | orders_with_status
-    -------------+-------------------
-    1500         | 1420              
-
-[3] risk: The order timestamps may not cover the entire day due to the time range of the data, potentially missing orders placed late in the day.
-    probe: SELECT MIN(order_ts) AS earliest_order, MAX(order_ts) AS latest_order FROM orders
-    returned:
-    earliest_order      | latest_order       
-    --------------------+--------------------
-    2026-01-01 02:11:00 | 2026-03-31 21:27:00
-
-[4] risk: The query may not account for orders that were placed just before the end of the day in UTC, which could be counted as the next day in Jakarta.
-    probe: SELECT COUNT(*) AS orders_before_jakarta_day_end FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'
-    returned:
-    orders_before_jakarta_day_end
-    -----------------------------
-    12                           
+(no probes were executed)
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
+  sql: SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'
   returned:
     orders_on_day
     -------------
-    11           
+    12           
 
   the query under review returned:
     orders_on_day
@@ -413,21 +319,20 @@ actually lives at that finer grain.
 
 ```json
 {
-  "verdict": "BUG",
-  "bug_type": "timezone_day_boundary",
-  "confidence": 0.9,
-  "explanation": "The query under review counts orders based on UTC timestamps without adjusting for the Asia/Jakarta timezone, leading to potential miscounts at the day boundary. The independent recomputation indicates a discrepancy in the count of orders on the specified date. The orders table has a range of timestamps that may not align with the local day in Jakarta.",
-  "corrected_sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL"
+  "verdict": "CLEAN",
+  "bug_type": null,
+  "confidence": 1,
+  "explanation": "The query correctly counts the number of orders placed on 31 January 2026, matching the business question. Both the original query and the independent recomputation returned the same result of 12 orders. The date filtering is appropriately applied to the 'order_ts' field in the 'orders' table.",
+  "corrected_sql": null
 }
 ```
 
-## 11. gate · verification_gate
+## 8. gate · verification_gate
 
-**BUG** — an independently derived query returns a different number, demonstrating the discrepancy
+**CLEAN** — an independently derived query returns the same number, corroborating the reported result
 
 ```json
 {
-  "reported": "orders_on_day\n-------------\n12           ",
-  "recomputed": "orders_on_day\n-------------\n11           "
+  "both_returned": "orders_on_day\n-------------\n12           "
 }
 ```

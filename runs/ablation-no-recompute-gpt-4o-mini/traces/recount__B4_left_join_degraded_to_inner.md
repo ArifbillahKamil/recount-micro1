@@ -1,6 +1,6 @@
 # Trajectory — recount — B4_left_join_degraded_to_inner
 
-`2` model calls (`1` replayed from cassette) · `6` tool calls · `2486` tokens · `$0.00061`
+`1` model calls (`0` replayed from cassette) · `3` tool calls · `1105` tokens · `$0.00023`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -24,7 +24,11 @@ orders_seen | refunded_cents
 103         | 308416250     
 ```
 
-## 2. tool · `profiler.profile` · profile_warehouse · ok
+## 2. note · profile_disabled
+
+Warehouse profiling disabled; both roles see the schema only.
+
+## 3. tool · `profiler.format_hints` · value_formats · ok
 
 **request**
 
@@ -33,10 +37,6 @@ orders_seen | refunded_cents
   "tables": [
     "orders",
     "refunds"
-  ],
-  "views": [
-    "reviewer",
-    "author"
   ]
 }
 ```
@@ -44,212 +44,25 @@ orders_seen | refunded_cents
 **response**
 
 ```
-MEASURED WAREHOUSE FACTS
+STORED VALUE FORMATS
 
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
+  refunds.refund_ts (TEXT): values are stored like '2026-01-02 02:11:00' through '2026-04-15 07:08:00'
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
-
-refunds: 103 rows, one row per refund_id
-  refund_id: INTEGER, pk, 103 distinct
-  order_id: INTEGER, 103 distinct
-  amount_cents: INTEGER, 99 distinct
-  refund_ts: TEXT, 103 distinct, range 2026-01-02 02:11:00 .. 2026-04-15 07:08:00
-  reason: TEXT, 4 distinct
+Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
 ```
 
-## 3. note · recompute_disabled
+## 4. note · recompute_disabled
 
 Independent recomputation disabled for this run.
 
-## 4. model · plan
+## 5. note · probes_disabled
 
-`gpt-4o-mini` · replayed · 790 in / 423 out · 0.00s
+Probe stage disabled for this run; adjudicating from measured facts alone.
 
-**system**
+## 6. model · adjudicate
 
-```
-You are a senior analytics engineer who has been burned by
-queries that run cleanly and return the wrong number. You do not speculate: you
-design a measurement that would settle each suspicion.
-```
-
-**user**
-
-```
-Business question the analyst asked:
-Across all orders, how many orders are there and what is the total refunded amount? Orders that were never refunded count as zero.
-
-SQL that was produced and executed successfully:
-SELECT COUNT(*) AS orders_seen,
-                   COALESCE(SUM(r.amount_cents), 0) AS refunded_cents
-            FROM orders o
-            LEFT JOIN refunds r ON r.order_id = o.order_id
-            WHERE r.amount_cents >= 0
-
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
-
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
-
-refunds: 103 rows, one row per refund_id
-  refund_id: INTEGER, pk, 103 distinct
-  order_id: INTEGER, 103 distinct
-  amount_cents: INTEGER, 99 distinct
-  refund_ts: TEXT, 103 distinct, range 2026-01-02 02:11:00 .. 2026-04-15 07:08:00
-  reason: TEXT, 4 distinct
-
-The query returned this result:
-orders_seen | refunded_cents
-------------+---------------
-103         | 308416250     
-
-List the specific ways this query could fail to answer the business question.
-For each one, write a probe: a single read-only SELECT whose output would settle
-whether that failure is actually happening in this data.
-
-A good probe measures a consequence. Compare a row count before and after a
-join, compare COUNT(*) against COUNT(DISTINCT key), count rows excluded by a
-predicate, or compute the requested metric by an independent route and show both
-numbers. A probe that merely re-runs the original query settles nothing.
-
-Reply with one JSON object and nothing else:
-
-{
-  "hypotheses": [
-    {
-      "risk": "one sentence, naming the tables or columns involved",
-      "bug_type": one of ["fanout_join", "null_swallowing_predicate", "left_join_degraded_to_inner", "date_range_truncation", "timezone_day_boundary", "mixed_unit_aggregation", "missing_filter", "wrong_aggregation_grain", "other"],
-      "probe_sql": "a single SELECT, no semicolon",
-      "settles": "what result would confirm this, and what would rule it out"
-    }
-  ]
-}
-
-At most 4 hypotheses, ordered by how likely they are given the
-measured facts above. If the measured facts already show a table does not fan
-out, do not propose a fan-out hypothesis about it.
-```
-
-**assistant**
-
-```json
-{
-  "hypotheses": [
-    {
-      "risk": "The join between orders and refunds may be causing a fanout issue, leading to an incorrect count of orders.",
-      "bug_type": "fanout_join",
-      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS distinct_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id",
-      "settles": "If the result is 1500, it confirms the original query is counting orders incorrectly due to fanout; if less than 1500, it rules out this issue."
-    },
-    {
-      "risk": "The condition r.amount_cents >= 0 may be excluding valid refunds, leading to an incorrect total refunded amount.",
-      "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) AS total_refunds_excluded FROM refunds r WHERE r.amount_cents < 0",
-      "settles": "If the result is greater than 0, it confirms that valid refunds are being excluded; if 0, it rules out this issue."
-    },
-    {
-      "risk": "The query may be miscounting orders due to the presence of NULL values in the orders table.",
-      "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL",
-      "settles": "If the result is 80, it confirms that NULL statuses are affecting the count; if 0, it rules out this issue."
-    },
-    {
-      "risk": "The aggregation of refunded amounts may be incorrect due to the join structure, leading to inflated totals.",
-      "bug_type": "wrong_aggregation_grain",
-      "probe_sql": "SELECT SUM(r.amount_cents) AS total_refunded_amount FROM refunds r",
-      "settles": "If the result matches the refunded_cents from the original query, it rules out this issue; if it differs, it confirms a problem with the aggregation."
-    }
-  ]
-}
-```
-
-## 5. tool · `run_sql` · probe_1 · ok
-
-**request**
-
-```sql
-SELECT COUNT(DISTINCT o.order_id) AS distinct_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id
-```
-
-**response**
-
-```
-distinct_orders
----------------
-1500           
-```
-
-## 6. tool · `run_sql` · probe_2 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) AS total_refunds_excluded FROM refunds r WHERE r.amount_cents < 0
-```
-
-**response**
-
-```
-total_refunds_excluded
-----------------------
-0                     
-```
-
-## 7. tool · `run_sql` · probe_3 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL
-```
-
-**response**
-
-```
-null_status_orders
-------------------
-80                
-```
-
-## 8. tool · `run_sql` · probe_4 · ok
-
-**request**
-
-```sql
-SELECT SUM(r.amount_cents) AS total_refunded_amount FROM refunds r
-```
-
-**response**
-
-```
-total_refunded_amount
----------------------
-308416250            
-```
-
-## 9. model · adjudicate
-
-`gpt-4o-mini` · live call · 1170 in / 103 out · 1.64s
+`gpt-4o-mini` · live call · 965 in / 140 out · 1.56s
 
 **system**
 
@@ -277,56 +90,70 @@ orders_seen | refunded_cents
 ------------+---------------
 103         | 308416250     
 
-MEASURED WAREHOUSE FACTS
+SCHEMA
 
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+CREATE TABLE customers (
+    customer_id   INTEGER PRIMARY KEY,
+    name          TEXT    NOT NULL,
+    country       TEXT    NOT NULL,
+    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC
+);
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
+CREATE TABLE marketing_spend (
+    spend_date  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL,
+    spend_cents INTEGER NOT NULL,
+    PRIMARY KEY (spend_date, channel)
+);
 
-refunds: 103 rows, one row per refund_id
-  refund_id: INTEGER, pk, 103 distinct
-  order_id: INTEGER, 103 distinct
-  amount_cents: INTEGER, 99 distinct
-  refund_ts: TEXT, 103 distinct, range 2026-01-02 02:11:00 .. 2026-04-15 07:08:00
-  reason: TEXT, 4 distinct
+CREATE TABLE order_items (
+    order_item_id    INTEGER PRIMARY KEY,
+    order_id         INTEGER NOT NULL REFERENCES orders(order_id),
+    product_id       INTEGER NOT NULL REFERENCES products(product_id),
+    quantity         INTEGER NOT NULL,
+    unit_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE orders (
+    order_id    INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC
+    status      TEXT,               -- nullable on purpose
+    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'
+);
+
+CREATE TABLE payments (
+    payment_id   INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    paid_ts      TEXT    NOT NULL,
+    method       TEXT    NOT NULL
+);
+
+CREATE TABLE products (
+    product_id       INTEGER PRIMARY KEY,
+    name             TEXT    NOT NULL,
+    category         TEXT    NOT NULL,
+    list_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE refunds (
+    refund_id    INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    refund_ts    TEXT    NOT NULL,
+    reason       TEXT    NOT NULL
+);
+
+CREATE TABLE sessions (
+    session_id  INTEGER PRIMARY KEY,
+    customer_id INTEGER REFERENCES customers(customer_id),
+    session_ts  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL
+);
 
 Probes you designed, and what executing them actually returned:
-[1] risk: The join between orders and refunds may be causing a fanout issue, leading to an incorrect count of orders.
-    probe: SELECT COUNT(DISTINCT o.order_id) AS distinct_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id
-    returned:
-    distinct_orders
-    ---------------
-    1500           
-
-[2] risk: The condition r.amount_cents >= 0 may be excluding valid refunds, leading to an incorrect total refunded amount.
-    probe: SELECT COUNT(*) AS total_refunds_excluded FROM refunds r WHERE r.amount_cents < 0
-    returned:
-    total_refunds_excluded
-    ----------------------
-    0                     
-
-[3] risk: The query may be miscounting orders due to the presence of NULL values in the orders table.
-    probe: SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL
-    returned:
-    null_status_orders
-    ------------------
-    80                
-
-[4] risk: The aggregation of refunded amounts may be incorrect due to the join structure, leading to inflated totals.
-    probe: SELECT SUM(r.amount_cents) AS total_refunded_amount FROM refunds r
-    returned:
-    total_refunded_amount
-    ---------------------
-    308416250            
+(no probes were executed)
 
 Independent recomputation: not attempted.
 
@@ -367,14 +194,37 @@ actually lives at that finer grain.
 
 ```json
 {
-  "verdict": "CLEAN",
-  "bug_type": null,
-  "confidence": 1,
-  "explanation": "The query correctly counts all orders and sums the refunded amounts, with no issues from the join structure or filtering conditions. The independent probe confirms the total refunded amount matches the query result, ensuring accuracy. The presence of NULL values in the status column does not affect the count of orders since they are included in the LEFT JOIN.",
-  "corrected_sql": null
+  "verdict": "BUG",
+  "bug_type": "left_join_degraded_to_inner",
+  "confidence": 0.8,
+  "explanation": "The query uses a LEFT JOIN between orders and refunds, but the WHERE clause filters out any refunds with negative amounts, which effectively turns it into an INNER JOIN. This could lead to an undercount of orders if any orders have refunds that are not included due to this condition.",
+  "corrected_sql": "SELECT COUNT(*) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id"
 }
 ```
 
-## 10. gate · verification_gate
+## 7. tool · `run_sql` · gate_execute_correction · ok
 
-**CLEAN** — no bug claimed, so no correction is required
+**request**
+
+```sql
+SELECT COUNT(*) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id
+```
+
+**response**
+
+```
+orders_seen | refunded_cents
+------------+---------------
+1500        | 308416250     
+```
+
+## 8. gate · verification_gate
+
+**BUG** — the correction executes and returns a different result, so the discrepancy is demonstrated
+
+```json
+{
+  "reported": "orders_seen | refunded_cents\n------------+---------------\n103         | 308416250     ",
+  "corrected": "orders_seen | refunded_cents\n------------+---------------\n1500        | 308416250     "
+}
+```

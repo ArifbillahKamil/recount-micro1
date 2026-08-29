@@ -1,6 +1,6 @@
 # Trajectory — baseline — B6_timezone_day_misattribution
 
-`1` model calls (`1` replayed from cassette) · `0` tool calls · `919` tokens · `$0.00020`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `920` tokens · `$0.00020`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · replayed · 789 in / 130 out · 0.00s
+`gpt-4o-mini` · replayed · 789 in / 131 out · 0.00s
 
 **system**
 
@@ -129,14 +129,14 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "timezone_day_boundary",
   "confidence": 0.9,
-  "explanation": "The query does not account for the timezone difference of UTC+7 for the Asia/Jakarta calendar. As a result, it may incorrectly count orders placed on 30 January 2026 in UTC as orders on 31 January 2026 in Asia/Jakarta. The relevant table is 'orders'.",
+  "explanation": "The query does not account for the timezone difference of UTC+7 for the Asia/Jakarta calendar. As a result, it may incorrectly count orders placed on 30 January 2026 in UTC as orders on 31 January 2026 in Asia/Jakarta time. The relevant table is 'orders'.",
   "corrected_sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'"
 }
 ```
 
 ## 3. gate · final
 
-**BUG** — The query does not account for the timezone difference of UTC+7 for the Asia/Jakarta calendar. As a result, it may incorrectly count orders placed on 30 January 2026 in UTC as orders on 31 January 2026 in Asia/Jakarta. The relevant table is 'orders'.
+**BUG** — The query does not account for the timezone difference of UTC+7 for the Asia/Jakarta calendar. As a result, it may incorrectly count orders placed on 30 January 2026 in UTC as orders on 31 January 2026 in Asia/Jakarta time. The relevant table is 'orders'.
 
 ```json
 {

@@ -1,6 +1,6 @@
 # Trajectory — recount — C2_clean_units_sold_at_line_grain
 
-`3` model calls (`3` replayed from cassette) · `7` tool calls · `3180` tokens · `$0.00078`
+`2` model calls (`2` replayed from cassette) · `3` tool calls · `1808` tokens · `$0.00034`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -23,7 +23,11 @@ units_sold
 2993      
 ```
 
-## 2. tool · `profiler.profile` · profile_warehouse · ok
+## 2. note · profile_disabled
+
+Warehouse profiling disabled; both roles see the schema only.
+
+## 3. tool · `profiler.format_hints` · value_formats · ok
 
 **request**
 
@@ -32,10 +36,6 @@ units_sold
   "tables": [
     "order_items",
     "orders"
-  ],
-  "views": [
-    "reviewer",
-    "author"
   ]
 }
 ```
@@ -43,33 +43,16 @@ units_sold
 **response**
 
 ```
-MEASURED WAREHOUSE FACTS
+STORED VALUE FORMATS
 
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! order_items.product_id -> products.product_id: FANS OUT x54.07 avg, up to x73; 60 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
 
-order_items: 3244 rows, one row per order_item_id
-  order_item_id: INTEGER, pk, 3244 distinct
-  order_id: INTEGER, 1500 distinct
-  product_id: INTEGER, 60 distinct
-  quantity: INTEGER, 3 distinct
-  unit_price_cents: INTEGER, 57 distinct
-
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
+Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
 ```
 
-## 3. model · recompute
+## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 421 in / 62 out · 0.00s
+`gpt-4o-mini` · replayed · 650 in / 65 out · 0.00s
 
 **system**
 
@@ -86,23 +69,73 @@ answer independently.
 Business question:
 How many units did we sell across completed orders?
 
-MEASURED COLUMN FACTS
+SCHEMA
 
-order_items: 3244 rows, one row per order_item_id
-  order_item_id: INTEGER, pk, 3244 distinct
-  order_id: INTEGER, 1500 distinct
-  product_id: INTEGER, 60 distinct
-  quantity: INTEGER, 3 distinct
-  unit_price_cents: INTEGER, 57 distinct
+CREATE TABLE customers (
+    customer_id   INTEGER PRIMARY KEY,
+    name          TEXT    NOT NULL,
+    country       TEXT    NOT NULL,
+    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC
+);
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
-  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
-  currency: TEXT, 2 distinct
+CREATE TABLE marketing_spend (
+    spend_date  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL,
+    spend_cents INTEGER NOT NULL,
+    PRIMARY KEY (spend_date, channel)
+);
 
-Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
+CREATE TABLE order_items (
+    order_item_id    INTEGER PRIMARY KEY,
+    order_id         INTEGER NOT NULL REFERENCES orders(order_id),
+    product_id       INTEGER NOT NULL REFERENCES products(product_id),
+    quantity         INTEGER NOT NULL,
+    unit_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE orders (
+    order_id    INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC
+    status      TEXT,               -- nullable on purpose
+    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'
+);
+
+CREATE TABLE payments (
+    payment_id   INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    paid_ts      TEXT    NOT NULL,
+    method       TEXT    NOT NULL
+);
+
+CREATE TABLE products (
+    product_id       INTEGER PRIMARY KEY,
+    name             TEXT    NOT NULL,
+    category         TEXT    NOT NULL,
+    list_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE refunds (
+    refund_id    INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    refund_ts    TEXT    NOT NULL,
+    reason       TEXT    NOT NULL
+);
+
+CREATE TABLE sessions (
+    session_id  INTEGER PRIMARY KEY,
+    customer_id INTEGER REFERENCES customers(customer_id),
+    session_ts  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL
+);
+
+STORED VALUE FORMATS
+
+  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
+
+Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
@@ -122,204 +155,32 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL", "reasoning": "I summed the quantity from order_items where the corresponding orders have a non-null status to count only completed orders."}
+{"sql": "SELECT SUM(order_items.quantity) AS units_sold FROM order_items JOIN orders ON order_items.order_id = orders.order_id WHERE orders.status = 'completed'", "reasoning": "I summed the quantity of order items for orders that have a status of 'completed' to get the total units sold."}
 ```
 
-## 4. tool · `run_sql` · recompute · ok
+## 5. tool · `run_sql` · recompute · ok
 
 **request**
 
 ```sql
-SELECT SUM(quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL
+SELECT SUM(order_items.quantity) AS units_sold FROM order_items JOIN orders ON order_items.order_id = orders.order_id WHERE orders.status = 'completed'
 ```
 
 **response**
 
 ```
-units_sold
-----------
-4212      
-```
-
-## 5. model · plan
-
-`gpt-4o-mini` · replayed · 759 in / 492 out · 0.00s
-
-**system**
-
-```
-You are a senior analytics engineer who has been burned by
-queries that run cleanly and return the wrong number. You do not speculate: you
-design a measurement that would settle each suspicion.
-```
-
-**user**
-
-```
-Business question the analyst asked:
-How many units did we sell across completed orders?
-
-SQL that was produced and executed successfully:
-SELECT SUM(oi.quantity) AS units_sold
-            FROM orders o
-            JOIN order_items oi ON oi.order_id = o.order_id
-            WHERE o.status = 'completed'
-
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! order_items.product_id -> products.product_id: FANS OUT x54.07 avg, up to x73; 60 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
-
-order_items: 3244 rows, one row per order_item_id
-  order_item_id: INTEGER, pk, 3244 distinct
-  order_id: INTEGER, 1500 distinct
-  product_id: INTEGER, 60 distinct
-  quantity: INTEGER, 3 distinct
-  unit_price_cents: INTEGER, 57 distinct
-
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
-
-The query returned this result:
 units_sold
 ----------
 2993      
-
-List the specific ways this query could fail to answer the business question.
-For each one, write a probe: a single read-only SELECT whose output would settle
-whether that failure is actually happening in this data.
-
-A good probe measures a consequence. Compare a row count before and after a
-join, compare COUNT(*) against COUNT(DISTINCT key), count rows excluded by a
-predicate, or compute the requested metric by an independent route and show both
-numbers. A probe that merely re-runs the original query settles nothing.
-
-Reply with one JSON object and nothing else:
-
-{
-  "hypotheses": [
-    {
-      "risk": "one sentence, naming the tables or columns involved",
-      "bug_type": one of ["fanout_join", "null_swallowing_predicate", "left_join_degraded_to_inner", "date_range_truncation", "timezone_day_boundary", "mixed_unit_aggregation", "missing_filter", "wrong_aggregation_grain", "other"],
-      "probe_sql": "a single SELECT, no semicolon",
-      "settles": "what result would confirm this, and what would rule it out"
-    }
-  ]
-}
-
-At most 4 hypotheses, ordered by how likely they are given the
-measured facts above. If the measured facts already show a table does not fan
-out, do not propose a fan-out hypothesis about it.
 ```
 
-**assistant**
+## 6. note · probes_disabled
 
-```json
-{
-  "hypotheses": [
-    {
-      "risk": "The join between orders and order_items may be causing a fanout issue due to multiple order_items per order.",
-      "bug_type": "fanout_join",
-      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(oi.order_id) AS total_order_items FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If distinct_orders is significantly less than total_order_items, it confirms a fanout issue. If they are close, it rules it out."
-    },
-    {
-      "risk": "Some completed orders may have NULL values in the order_items table, leading to an undercount of units sold.",
-      "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS total_completed_orders, COUNT(oi.order_id) AS total_order_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If total_completed_orders is greater than total_order_items, it confirms that some completed orders have no associated order_items. If they are equal, it rules it out."
-    },
-    {
-      "risk": "The query may be missing orders that were completed but have been excluded due to a status filter.",
-      "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) AS total_orders FROM orders WHERE status = 'completed'",
-      "settles": "If total_orders matches the expected number of completed orders, it rules out missing orders. If it is higher than expected, it confirms the issue."
-    },
-    {
-      "risk": "The aggregation of quantities may be incorrect due to the presence of multiple order_items for the same order.",
-      "bug_type": "wrong_aggregation_grain",
-      "probe_sql": "SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT o.order_id) AS distinct_orders FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If total_units_sold divided by distinct_orders is greater than the average quantity per order, it confirms a wrong aggregation grain. If it is consistent, it rules it out."
-    }
-  ]
-}
-```
+Probe stage disabled for this run; adjudicating from measured facts alone.
 
-## 6. tool · `run_sql` · probe_1 · ok
+## 7. model · adjudicate
 
-**request**
-
-```sql
-SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(oi.order_id) AS total_order_items FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
-```
-
-**response**
-
-```
-distinct_orders | total_order_items
-----------------+------------------
-1018            | 2169             
-```
-
-## 7. tool · `run_sql` · probe_2 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) AS total_completed_orders, COUNT(oi.order_id) AS total_order_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
-```
-
-**response**
-
-```
-total_completed_orders | total_order_items
------------------------+------------------
-2169                   | 2169             
-```
-
-## 8. tool · `run_sql` · probe_3 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) AS total_orders FROM orders WHERE status = 'completed'
-```
-
-**response**
-
-```
-total_orders
-------------
-1018        
-```
-
-## 9. tool · `run_sql` · probe_4 · ok
-
-**request**
-
-```sql
-SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT o.order_id) AS distinct_orders FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
-```
-
-**response**
-
-```
-total_units_sold | distinct_orders
------------------+----------------
-2993             | 1018           
-```
-
-## 10. model · adjudicate
-
-`gpt-4o-mini` · replayed · 1319 in / 127 out · 0.00s
+`gpt-4o-mini` · replayed · 1005 in / 88 out · 0.00s
 
 **system**
 
@@ -346,65 +207,78 @@ units_sold
 ----------
 2993      
 
-MEASURED WAREHOUSE FACTS
+SCHEMA
 
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! order_items.product_id -> products.product_id: FANS OUT x54.07 avg, up to x73; 60 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+CREATE TABLE customers (
+    customer_id   INTEGER PRIMARY KEY,
+    name          TEXT    NOT NULL,
+    country       TEXT    NOT NULL,
+    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC
+);
 
-order_items: 3244 rows, one row per order_item_id
-  order_item_id: INTEGER, pk, 3244 distinct
-  order_id: INTEGER, 1500 distinct
-  product_id: INTEGER, 60 distinct
-  quantity: INTEGER, 3 distinct
-  unit_price_cents: INTEGER, 57 distinct
+CREATE TABLE marketing_spend (
+    spend_date  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL,
+    spend_cents INTEGER NOT NULL,
+    PRIMARY KEY (spend_date, channel)
+);
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
+CREATE TABLE order_items (
+    order_item_id    INTEGER PRIMARY KEY,
+    order_id         INTEGER NOT NULL REFERENCES orders(order_id),
+    product_id       INTEGER NOT NULL REFERENCES products(product_id),
+    quantity         INTEGER NOT NULL,
+    unit_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE orders (
+    order_id    INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC
+    status      TEXT,               -- nullable on purpose
+    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'
+);
+
+CREATE TABLE payments (
+    payment_id   INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    paid_ts      TEXT    NOT NULL,
+    method       TEXT    NOT NULL
+);
+
+CREATE TABLE products (
+    product_id       INTEGER PRIMARY KEY,
+    name             TEXT    NOT NULL,
+    category         TEXT    NOT NULL,
+    list_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE refunds (
+    refund_id    INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    refund_ts    TEXT    NOT NULL,
+    reason       TEXT    NOT NULL
+);
+
+CREATE TABLE sessions (
+    session_id  INTEGER PRIMARY KEY,
+    customer_id INTEGER REFERENCES customers(customer_id),
+    session_ts  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL
+);
 
 Probes you designed, and what executing them actually returned:
-[1] risk: The join between orders and order_items may be causing a fanout issue due to multiple order_items per order.
-    probe: SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(oi.order_id) AS total_order_items FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
-    returned:
-    distinct_orders | total_order_items
-    ----------------+------------------
-    1018            | 2169             
-
-[2] risk: Some completed orders may have NULL values in the order_items table, leading to an undercount of units sold.
-    probe: SELECT COUNT(*) AS total_completed_orders, COUNT(oi.order_id) AS total_order_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
-    returned:
-    total_completed_orders | total_order_items
-    -----------------------+------------------
-    2169                   | 2169             
-
-[3] risk: The query may be missing orders that were completed but have been excluded due to a status filter.
-    probe: SELECT COUNT(*) AS total_orders FROM orders WHERE status = 'completed'
-    returned:
-    total_orders
-    ------------
-    1018        
-
-[4] risk: The aggregation of quantities may be incorrect due to the presence of multiple order_items for the same order.
-    probe: SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT o.order_id) AS distinct_orders FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
-    returned:
-    total_units_sold | distinct_orders
-    -----------------+----------------
-    2993             | 1018           
+(no probes were executed)
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT SUM(quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL
+  sql: SELECT SUM(order_items.quantity) AS units_sold FROM order_items JOIN orders ON order_items.order_id = orders.order_id WHERE orders.status = 'completed'
   returned:
     units_sold
     ----------
-    4212      
+    2993      
 
   the query under review returned:
     units_sold
@@ -448,25 +322,20 @@ actually lives at that finer grain.
 
 ```json
 {
-  "verdict": "BUG",
-  "bug_type": "wrong_aggregation_grain",
-  "confidence": 0.9,
-  "explanation": "The query under review aggregates units sold from the order_items table based on completed orders, but the independent recomputation indicates a higher total of units sold. This suggests that the query may be missing some completed orders or order items, leading to an undercount.",
-  "corrected_sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'"
+  "verdict": "CLEAN",
+  "bug_type": null,
+  "confidence": 1,
+  "explanation": "Both the query under review and the independent recomputation return the same result of 2993 units sold across completed orders. The joins between the 'orders' and 'order_items' tables are appropriate for calculating the total quantity sold for completed orders.",
+  "corrected_sql": null
 }
 ```
 
-## 11. note · correction
+## 8. gate · verification_gate
 
-The reviewer's correction returns the original number, so it repairs nothing; using the independently derived query instead.
-
-## 12. gate · verification_gate
-
-**BUG** — an independently derived query returns a different number, demonstrating the discrepancy
+**CLEAN** — an independently derived query returns the same number, corroborating the reported result
 
 ```json
 {
-  "reported": "units_sold\n----------\n2993      ",
-  "recomputed": "units_sold\n----------\n4212      "
+  "both_returned": "units_sold\n----------\n2993      "
 }
 ```

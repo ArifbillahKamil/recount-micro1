@@ -1,7 +1,7 @@
 {
   "cassette_key": "369627cafb02ad35b1a7868cf51943d3",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:30:16Z",
+  "recorded_at": "2026-08-29T01:53:16Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI2BvRp77AM0LFN84POlj66yviQw9",
+    "id": "chatcmpl-EI2YBZhoZOzqhToe9JgBFbiykFcQw",
     "object": "chat.completion",
-    "created": 1787967035,
+    "created": 1787968415,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"wrong_aggregation_grain\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review counts completed orders and sums payments, but it only considers orders with associated payments, leading to a lower count of orders. The independent recomputation shows a higher count of completed orders, indicating that some completed orders do not have corresponding payments in the payments table.\",\n  \"corrected_sql\": \"SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o LEFT JOIN payments p ON o.order_id = p.order_id WHERE o.status = 'completed'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"wrong_aggregation_grain\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review counts distinct orders from the 'orders' table where the status is 'completed' and joins with the 'payments' table. However, the independent recomputation indicates that there are more completed orders than captured payments, suggesting that the join may be incorrectly filtering out some completed orders.\",\n  \"corrected_sql\": \"SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o LEFT JOIN payments p ON o.order_id = p.order_id WHERE o.status = 'completed'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1028,
-      "completion_tokens": 144,
-      "total_tokens": 1172,
+      "completion_tokens": 148,
+      "total_tokens": 1176,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

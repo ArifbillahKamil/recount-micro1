@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 803 in / 110 out · 2.31s
+`gpt-4o-mini` · live call · 803 in / 110 out · 3.16s
 
 **system**
 

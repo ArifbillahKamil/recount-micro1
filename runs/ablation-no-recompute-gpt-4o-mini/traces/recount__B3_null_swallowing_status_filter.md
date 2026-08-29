@@ -1,6 +1,6 @@
 # Trajectory — recount — B3_null_swallowing_status_filter
 
-`2` model calls (`1` replayed from cassette) · `7` tool calls · `2249` tokens · `$0.00059`
+`1` model calls (`0` replayed from cassette) · `2` tool calls · `999` tokens · `$0.00019`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -22,7 +22,11 @@ active_orders
 1277         
 ```
 
-## 2. tool · `profiler.profile` · profile_warehouse · ok
+## 2. note · profile_disabled
+
+Warehouse profiling disabled; both roles see the schema only.
+
+## 3. tool · `profiler.format_hints` · value_formats · ok
 
 **request**
 
@@ -30,10 +34,6 @@ active_orders
 {
   "tables": [
     "orders"
-  ],
-  "views": [
-    "reviewer",
-    "author"
   ]
 }
 ```
@@ -41,196 +41,24 @@ active_orders
 **response**
 
 ```
-MEASURED WAREHOUSE FACTS
+STORED VALUE FORMATS
 
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
+Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
 ```
 
-## 3. note · recompute_disabled
+## 4. note · recompute_disabled
 
 Independent recomputation disabled for this run.
 
-## 4. model · plan
+## 5. note · probes_disabled
 
-`gpt-4o-mini` · replayed · 649 in / 441 out · 0.00s
+Probe stage disabled for this run; adjudicating from measured facts alone.
 
-**system**
+## 6. model · adjudicate
 
-```
-You are a senior analytics engineer who has been burned by
-queries that run cleanly and return the wrong number. You do not speculate: you
-design a measurement that would settle each suspicion.
-```
-
-**user**
-
-```
-Business question the analyst asked:
-How many orders are not cancelled? Orders whose status was never stamped by fulfilment are still live business, so count them.
-
-SQL that was produced and executed successfully:
-SELECT COUNT(*) AS active_orders
-            FROM orders
-            WHERE status != 'cancelled'
-
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
-
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
-
-The query returned this result:
-active_orders
--------------
-1277         
-
-List the specific ways this query could fail to answer the business question.
-For each one, write a probe: a single read-only SELECT whose output would settle
-whether that failure is actually happening in this data.
-
-A good probe measures a consequence. Compare a row count before and after a
-join, compare COUNT(*) against COUNT(DISTINCT key), count rows excluded by a
-predicate, or compute the requested metric by an independent route and show both
-numbers. A probe that merely re-runs the original query settles nothing.
-
-Reply with one JSON object and nothing else:
-
-{
-  "hypotheses": [
-    {
-      "risk": "one sentence, naming the tables or columns involved",
-      "bug_type": one of ["fanout_join", "null_swallowing_predicate", "left_join_degraded_to_inner", "date_range_truncation", "timezone_day_boundary", "mixed_unit_aggregation", "missing_filter", "wrong_aggregation_grain", "other"],
-      "probe_sql": "a single SELECT, no semicolon",
-      "settles": "what result would confirm this, and what would rule it out"
-    }
-  ]
-}
-
-At most 4 hypotheses, ordered by how likely they are given the
-measured facts above. If the measured facts already show a table does not fan
-out, do not propose a fan-out hypothesis about it.
-```
-
-**assistant**
-
-```json
-{
-  "hypotheses": [
-    {
-      "risk": "The status column in the orders table contains NULL values that are not being counted as active orders",
-      "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL",
-      "settles": "If the result is greater than 0, it confirms that there are orders with NULL status not counted as active; if 0, it rules this out."
-    },
-    {
-      "risk": "The query does not account for orders that are still live but have a status that is not explicitly 'cancelled'",
-      "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) AS non_cancelled_orders FROM orders WHERE status IS NULL OR status != 'cancelled'",
-      "settles": "If this count is greater than 1277, it confirms that there are additional live orders not counted; if equal, it rules this out."
-    },
-    {
-      "risk": "The query does not consider the possibility of orders that have been fulfilled but are still counted as active due to incorrect status handling",
-      "bug_type": "wrong_aggregation_grain",
-      "probe_sql": "SELECT COUNT(DISTINCT order_id) AS distinct_active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'",
-      "settles": "If this count is less than 1277, it confirms that there are duplicate entries affecting the count; if equal, it rules this out."
-    },
-    {
-      "risk": "The query may not accurately reflect the current state of orders due to potential data latency or timing issues",
-      "bug_type": "other",
-      "probe_sql": "SELECT COUNT(*) AS total_orders FROM orders WHERE order_ts >= '2026-01-01' AND order_ts <= '2026-03-31'",
-      "settles": "If this count is less than 1500, it confirms that there are orders not accounted for in the active count due to timing; if equal, it rules this out."
-    }
-  ]
-}
-```
-
-## 5. tool · `run_sql` · probe_1 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL
-```
-
-**response**
-
-```
-null_status_orders
-------------------
-80                
-```
-
-## 6. tool · `run_sql` · probe_2 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) AS non_cancelled_orders FROM orders WHERE status IS NULL OR status != 'cancelled'
-```
-
-**response**
-
-```
-non_cancelled_orders
---------------------
-1357                
-```
-
-## 7. tool · `run_sql` · probe_3 · ok
-
-**request**
-
-```sql
-SELECT COUNT(DISTINCT order_id) AS distinct_active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'
-```
-
-**response**
-
-```
-distinct_active_orders
-----------------------
-1357                  
-```
-
-## 8. tool · `run_sql` · probe_4 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) AS total_orders FROM orders WHERE order_ts >= '2026-01-01' AND order_ts <= '2026-03-31'
-```
-
-**response**
-
-```
-total_orders
-------------
-1482        
-```
-
-## 9. model · adjudicate
-
-`gpt-4o-mini` · live call · 1042 in / 117 out · 1.93s
+`gpt-4o-mini` · live call · 918 in / 81 out · 1.12s
 
 **system**
 
@@ -256,49 +84,70 @@ active_orders
 -------------
 1277         
 
-MEASURED WAREHOUSE FACTS
+SCHEMA
 
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+CREATE TABLE customers (
+    customer_id   INTEGER PRIMARY KEY,
+    name          TEXT    NOT NULL,
+    country       TEXT    NOT NULL,
+    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC
+);
 
-orders: 1500 rows, one row per order_id
-  order_id: INTEGER, pk, 1500 distinct
-  customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
-  currency: TEXT, 2 distinct
+CREATE TABLE marketing_spend (
+    spend_date  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL,
+    spend_cents INTEGER NOT NULL,
+    PRIMARY KEY (spend_date, channel)
+);
+
+CREATE TABLE order_items (
+    order_item_id    INTEGER PRIMARY KEY,
+    order_id         INTEGER NOT NULL REFERENCES orders(order_id),
+    product_id       INTEGER NOT NULL REFERENCES products(product_id),
+    quantity         INTEGER NOT NULL,
+    unit_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE orders (
+    order_id    INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC
+    status      TEXT,               -- nullable on purpose
+    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'
+);
+
+CREATE TABLE payments (
+    payment_id   INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    paid_ts      TEXT    NOT NULL,
+    method       TEXT    NOT NULL
+);
+
+CREATE TABLE products (
+    product_id       INTEGER PRIMARY KEY,
+    name             TEXT    NOT NULL,
+    category         TEXT    NOT NULL,
+    list_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE refunds (
+    refund_id    INTEGER PRIMARY KEY,
+    order_id     INTEGER NOT NULL REFERENCES orders(order_id),
+    amount_cents INTEGER NOT NULL,
+    refund_ts    TEXT    NOT NULL,
+    reason       TEXT    NOT NULL
+);
+
+CREATE TABLE sessions (
+    session_id  INTEGER PRIMARY KEY,
+    customer_id INTEGER REFERENCES customers(customer_id),
+    session_ts  TEXT    NOT NULL,
+    channel     TEXT    NOT NULL
+);
 
 Probes you designed, and what executing them actually returned:
-[1] risk: The status column in the orders table contains NULL values that are not being counted as active orders
-    probe: SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL
-    returned:
-    null_status_orders
-    ------------------
-    80                
-
-[2] risk: The query does not account for orders that are still live but have a status that is not explicitly 'cancelled'
-    probe: SELECT COUNT(*) AS non_cancelled_orders FROM orders WHERE status IS NULL OR status != 'cancelled'
-    returned:
-    non_cancelled_orders
-    --------------------
-    1357                
-
-[3] risk: The query does not consider the possibility of orders that have been fulfilled but are still counted as active due to incorrect status handling
-    probe: SELECT COUNT(DISTINCT order_id) AS distinct_active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'
-    returned:
-    distinct_active_orders
-    ----------------------
-    1357                  
-
-[4] risk: The query may not accurately reflect the current state of orders due to potential data latency or timing issues
-    probe: SELECT COUNT(*) AS total_orders FROM orders WHERE order_ts >= '2026-01-01' AND order_ts <= '2026-03-31'
-    returned:
-    total_orders
-    ------------
-    1482        
+(no probes were executed)
 
 Independent recomputation: not attempted.
 
@@ -339,37 +188,14 @@ actually lives at that finer grain.
 
 ```json
 {
-  "verdict": "BUG",
-  "bug_type": "null_swallowing_predicate",
+  "verdict": "CLEAN",
+  "bug_type": null,
   "confidence": 0.9,
-  "explanation": "The query does not account for orders with a NULL status, which are still considered active. The probe confirmed that there are 80 orders with NULL status that are not included in the count of active orders. Therefore, the reported number of 1277 is inaccurate.",
-  "corrected_sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'"
+  "explanation": "The SQL query correctly counts the number of active orders by filtering out those with a status of 'cancelled'. It aligns with the business question regarding the status of orders in the 'orders' table.",
+  "corrected_sql": null
 }
 ```
 
-## 10. tool · `run_sql` · gate_execute_correction · ok
+## 7. gate · verification_gate
 
-**request**
-
-```sql
-SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'
-```
-
-**response**
-
-```
-active_orders
--------------
-1357         
-```
-
-## 11. gate · verification_gate
-
-**BUG** — the correction executes and returns a different result, so the discrepancy is demonstrated
-
-```json
-{
-  "reported": "active_orders\n-------------\n1277         ",
-  "corrected": "active_orders\n-------------\n1357         "
-}
-```
+**CLEAN** — no bug claimed, so no correction is required

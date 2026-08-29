@@ -1,6 +1,6 @@
 # Trajectory — baseline — B8_missing_status_filter
 
-`1` model calls (`0` replayed from cassette) · `0` tool calls · `891` tokens · `$0.00018`
+`1` model calls (`0` replayed from cassette) · `0` tool calls · `893` tokens · `$0.00019`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 776 in / 115 out · 1.79s
+`gpt-4o-mini` · live call · 776 in / 117 out · 1.70s
 
 **system**
 
@@ -129,14 +129,14 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query sums the payment amounts from the payments table but does not filter for completed orders. The orders table should be filtered to include only those with a status indicating completion, which is missing in the current query.",
+  "explanation": "The query sums the payment amounts from the payments table, but it does not filter for completed orders only. The orders table has a status column that should be checked to ensure only completed orders are included in the revenue calculation.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'"
 }
 ```
 
 ## 3. gate · final
 
-**BUG** — The query sums the payment amounts from the payments table but does not filter for completed orders. The orders table should be filtered to include only those with a status indicating completion, which is missing in the current query.
+**BUG** — The query sums the payment amounts from the payments table, but it does not filter for completed orders only. The orders table has a status column that should be checked to ensure only completed orders are included in the revenue calculation.
 
 ```json
 {

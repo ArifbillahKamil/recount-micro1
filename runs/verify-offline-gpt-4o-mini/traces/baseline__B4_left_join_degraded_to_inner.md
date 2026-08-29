@@ -1,6 +1,6 @@
 # Trajectory — baseline — B4_left_join_degraded_to_inner
 
-`1` model calls (`1` replayed from cassette) · `0` tool calls · `960` tokens · `$0.00021`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `963` tokens · `$0.00021`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · replayed · 814 in / 146 out · 0.00s
+`gpt-4o-mini` · replayed · 814 in / 149 out · 0.00s
 
 **system**
 
@@ -129,20 +129,20 @@ actually lives at that finer grain.
 ```json
 {
   "verdict": "BUG",
-  "bug_type": "left_join_degraded_to_inner",
+  "bug_type": "wrong_aggregation_grain",
   "confidence": 0.9,
-  "explanation": "The query uses a LEFT JOIN between orders and refunds, but the WHERE clause filters out any rows where refunds are NULL, effectively turning it into an INNER JOIN. This means that orders without refunds are not counted, which does not align with the requirement to count all orders, including those that were never refunded.",
+  "explanation": "The query counts the total number of orders but incorrectly filters out refunds with a condition on 'r.amount_cents >= 0', which is unnecessary and may lead to excluding valid refunds. Additionally, the aggregation should not be conditioned on the refund table, as it may lead to incorrect results for orders that have not been refunded.",
   "corrected_sql": "SELECT COUNT(*) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id"
 }
 ```
 
 ## 3. gate · final
 
-**BUG** — The query uses a LEFT JOIN between orders and refunds, but the WHERE clause filters out any rows where refunds are NULL, effectively turning it into an INNER JOIN. This means that orders without refunds are not counted, which does not align with the requirement to count all orders, including those that were never refunded.
+**BUG** — The query counts the total number of orders but incorrectly filters out refunds with a condition on 'r.amount_cents >= 0', which is unnecessary and may lead to excluding valid refunds. Additionally, the aggregation should not be conditioned on the refund table, as it may lead to incorrect results for orders that have not been refunded.
 
 ```json
 {
-  "bug_type": "left_join_degraded_to_inner",
+  "bug_type": "wrong_aggregation_grain",
   "confidence": 0.9
 }
 ```

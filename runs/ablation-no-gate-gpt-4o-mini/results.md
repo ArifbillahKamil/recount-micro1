@@ -1,6 +1,6 @@
 # Evaluation — ablation-no-gate-gpt-4o-mini
 
-Model `gpt-4o-mini` · mode `auto` · profile on · probes on · gate OFF
+Model `gpt-4o-mini` · mode `auto` · profile OFF · formats on · probes OFF · gate OFF
 
 Analyst-minute model: confirmed bug +12 min, false alarm -8 min, escalation -4 min, missed bug 0 min (counted as recall, not time)
 
@@ -8,18 +8,18 @@ Analyst-minute model: confirmed bug +12 min, false alarm -8 min, escalation -4 m
 
 | case | truth | verdict | class | bug type | repair | note |
 |---|---|---|---|---|---|---|
-| `B1_fanout_payments_via_line_items` | BUG | BUG | TP | missing_filter | correct | The query includes payments for orders that are not completed, as evid... |
-| `B2_fanout_units_via_payments` | BUG | BUG | TP | mixed_unit_aggregation | wrong | The query aggregates units sold from order_items while filtering on co... |
-| `B3_null_swallowing_status_filter` | BUG | BUG | TP | null_swallowing_predicate | correct | The query under review does not account for orders with a NULL status,... |
-| `B4_left_join_degraded_to_inner` | BUG | BUG | TP | wrong_aggregation_grain | wrong | The query under review counts orders based on the refunds table, which... |
-| `B5_between_loses_last_day` | BUG | BUG | TP | timezone_day_boundary | correct | The query under review does not account for orders placed on the last ... |
-| `B6_timezone_day_misattribution` | BUG | BUG | TP | timezone_day_boundary | wrong | The query under review counts orders based on UTC timestamps without a... |
-| `B7_mixed_currency_unit_error` | BUG | BUG | TP | mixed_unit_aggregation | correct | The query aggregates payments without filtering for the IDR currency, ... |
-| `B8_missing_status_filter` | BUG | BUG | TP | missing_filter | correct | The query does not filter out orders that are not completed, as eviden... |
-| `C1_clean_distinct_order_count_with_payments` | CLEAN | BUG | FP | fanout_join | wrong | The query under review counts distinct orders and sums payments, but t... |
-| `C2_clean_units_sold_at_line_grain` | CLEAN | BUG | FP | wrong_aggregation_grain | correct | The query under review aggregates units sold from the order_items tabl... |
-| `C3_clean_null_safe_active_orders` | CLEAN | CLEAN | TN | - | - | The query correctly counts orders that are not cancelled, including th... |
-| `C4_clean_half_open_date_range` | CLEAN | BUG | FP | missing_filter | wrong | The query under review does not filter out orders with a NULL status, ... |
+| `B1_fanout_payments_via_line_items` | BUG | BUG | TP | wrong_aggregation_grain | correct | The query under review aggregates payments based on completed orders b... |
+| `B2_fanout_units_via_payments` | BUG | BUG | TP | wrong_aggregation_grain | correct | The query under review joins the payments table, which is not necessar... |
+| `B3_null_swallowing_status_filter` | BUG | BUG | TP | missing_filter | correct | The query under review counts orders with a status that is not 'cancel... |
+| `B4_left_join_degraded_to_inner` | BUG | BUG | TP | wrong_aggregation_grain | correct | The query under review counts orders directly from the 'orders' table,... |
+| `B5_between_loses_last_day` | BUG | BUG | TP | date_range_truncation | correct | The query under review uses a date range that includes the entire day ... |
+| `B6_timezone_day_misattribution` | BUG | CLEAN | FN | - | - | The query correctly counts the number of orders placed on 31 January 2... |
+| `B7_mixed_currency_unit_error` | BUG | BUG | TP | wrong_aggregation_grain | correct | The query under review aggregates payments based on completed orders w... |
+| `B8_missing_status_filter` | BUG | BUG | TP | missing_filter | correct | The query under review does not filter for completed orders, which is ... |
+| `C1_clean_distinct_order_count_with_payments` | CLEAN | CLEAN | TN | - | - | The query correctly counts distinct completed orders from the 'orders'... |
+| `C2_clean_units_sold_at_line_grain` | CLEAN | CLEAN | TN | - | - | Both the query under review and the independent recomputation return t... |
+| `C3_clean_null_safe_active_orders` | CLEAN | CLEAN | TN | - | - | The query correctly counts the number of orders that are not cancelled... |
+| `C4_clean_half_open_date_range` | CLEAN | CLEAN | TN | - | - | The query correctly counts the number of orders placed in January 2026... |
 
 ```json
 {
@@ -28,30 +28,30 @@ Analyst-minute model: confirmed bug +12 min, false alarm -8 min, escalation -4 m
   "n_bug": 8,
   "n_clean": 4,
   "confusion": {
-    "tp": 8,
-    "fp": 3,
-    "fn": 0,
-    "tn": 1
+    "tp": 7,
+    "fp": 0,
+    "fn": 1,
+    "tn": 4
   },
-  "precision": 0.7273,
-  "recall": 1.0,
-  "f1": 0.8421,
-  "false_alarm_rate": 0.75,
-  "repair_accuracy": 0.625,
-  "repairs_correct": 5,
-  "repairs_attempted": 8,
-  "bug_type_accuracy": 0.5,
+  "precision": 1.0,
+  "recall": 0.875,
+  "f1": 0.9333,
+  "false_alarm_rate": 0.0,
+  "repair_accuracy": 0.875,
+  "repairs_correct": 7,
+  "repairs_attempted": 7,
+  "bug_type_accuracy": 0.2857,
   "escalations_on_bug": 0,
   "escalations_on_clean": 0,
   "errors": 0,
-  "net_analyst_minutes_modelled": 72.0,
+  "net_analyst_minutes_modelled": 84.0,
   "time_model": "confirmed bug +12 min, false alarm -8 min, escalation -4 min, missed bug 0 min (counted as recall, not time)",
-  "total_cost_usd": 0.009209,
-  "cost_per_case_usd": 0.000767,
+  "total_cost_usd": 0.00443,
+  "cost_per_case_usd": 0.000369,
   "cost_known": true,
-  "total_latency_s": 0.16,
-  "latency_per_case_s": 0.01,
-  "llm_calls": 36,
-  "tool_calls": 84
+  "total_latency_s": 0.04,
+  "latency_per_case_s": 0.0,
+  "llm_calls": 24,
+  "tool_calls": 36
 }
 ```
