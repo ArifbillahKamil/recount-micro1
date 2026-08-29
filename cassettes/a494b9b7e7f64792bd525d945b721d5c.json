@@ -1,0 +1,60 @@
+{
+  "cassette_key": "a494b9b7e7f64792bd525d945b721d5c",
+  "step": "adjudicate",
+  "recorded_at": "2026-08-29T01:27:26Z",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a senior analytics engineer signing off on\nwhether a number can go into a business report. You have executed probes and an\nindependent recomputation, and you now decide based on what they returned."
+      },
+      {
+        "role": "user",
+        "content": "Business question the analyst asked:\nWhat is the total captured revenue of the Indonesian business (IDR-denominated orders) from completed orders, in cents?\n\nSQL under review:\nSELECT SUM(p.amount_cents) AS idr_revenue_cents\n            FROM orders o\n            JOIN payments p ON p.order_id = o.order_id\n            WHERE o.status = 'completed'\n\nResult it returned:\nidr_revenue_cents\n-----------------\n5468920000       \n\nMEASURED WAREHOUSE FACTS\n\nJoin cardinality (measured, not inferred):\n  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row\n  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row\n  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row\n    refunds.order_id -> orders.order_id: one row per parent (safe to join)\n\norders: 1500 rows, one row per order_id\n  order_id: INTEGER, pk, 1500 distinct\n  customer_id: INTEGER, 389 distinct\n  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00\n  status: TEXT, NULL in 80 rows (5.3%), 4 distinct\n  currency: TEXT, 2 distinct\n\npayments: 1683 rows, one row per payment_id\n  payment_id: INTEGER, pk, 1683 distinct\n  order_id: INTEGER, 1357 distinct\n  amount_cents: INTEGER, 941 distinct\n  paid_ts: TEXT, 1672 distinct, range 2026-01-01 03:12:00 .. 2026-05-30 03:21:00\n  method: TEXT, 4 distinct\n\nProbes you designed, and what executing them actually returned:\n[1] risk: The payments table may contain payments for orders that are not completed.\n    probe: SELECT COUNT(*) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status != 'completed'\n    returned:\n    COUNT(*)\n    --------\n    327     \n\n[2] risk: The orders table may have completed orders that do not have corresponding payments.\n    probe: SELECT COUNT(*) FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND p.order_id IS NULL\n    returned:\n    COUNT(*)\n    --------\n    0       \n\n[3] risk: The query may be aggregating payments in different currencies without filtering for IDR.\n    probe: SELECT SUM(p.amount_cents) AS total_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency != 'IDR'\n    returned:\n    total_revenue_cents\n    -------------------\n    725420000          \n\n[4] risk: The payments table may contain duplicate entries for the same order.\n    probe: SELECT order_id, COUNT(*) FROM payments GROUP BY order_id HAVING COUNT(*) > 1\n    returned:\n    order_id | COUNT(*)\n    ---------+---------\n    2        | 2       \n    3        | 3       \n    9        | 2       \n    11       | 2       \n    14       | 2       \n    19       | 3       \n    24       | 2       \n    25       | 2       \n    28       | 3       \n    32       | 2       \n    33       | 2       \n    40       | 3       \n    ... 188 more row(s)\n    ... truncated at 200 rows\n\nAn independent recomputation was derived from the business question alone, without seeing the query under review, then executed:\n\n  sql: SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.currency = 'IDR'\n  returned:\n    idr_revenue_cents\n    -----------------\n    5968325000       \n\n  the query under review returned:\n    idr_revenue_cents\n    -----------------\n    5468920000       \n\nDecide the verdict from what was executed, not from how the SQL looks.\n\n* The recomputation above is the strongest evidence available. If it returns a\n  different number from the query under review, the two disagree and the\n  reported number cannot be trusted. If it returns the same number, two\n  independent derivations agree.\n* Judge against the business question. Joining to a finer grain is a bug when\n  the requested metric is coarser, and correct when the metric genuinely lives\n  at that finer grain.\n* If you answer BUG, corrected_sql is mandatory and will be executed.\n\nReply with one JSON object and nothing else:\n\n{\n  \"verdict\": \"CLEAN\" | \"BUG\" | \"ESCALATE\",\n  \"bug_type\": one of [\"fanout_join\", \"null_swallowing_predicate\", \"left_join_degraded_to_inner\", \"date_range_truncation\", \"timezone_day_boundary\", \"mixed_unit_aggregation\", \"missing_filter\", \"wrong_aggregation_grain\", \"other\"] or null,\n  \"confidence\": number between 0 and 1,\n  \"explanation\": \"at most 3 sentences, concrete, naming the tables involved\",\n  \"corrected_sql\": \"a single SELECT that answers the business question, or null\"\n}\n\nVerdict meanings:\n  CLEAN     - the query correctly answers the business question.\n  BUG       - the query runs but returns a number that does not answer the\n              business question. Set bug_type and corrected_sql.\n  ESCALATE  - answering needs a business decision you cannot make from the\n              schema and data alone. Use this instead of guessing.\n\nJudge the query against the business question, not against style. A join to a\nfiner grain is a bug when the metric is coarser, and correct when the metric\nactually lives at that finer grain."
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 1200,
+    "seed": 7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-EI29ArklxusdUzlnJZJwN7MSlZ7rm",
+    "object": "chat.completion",
+    "created": 1787966864,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"mixed_unit_aggregation\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query aggregates payments without filtering for the IDR currency, leading to a discrepancy in the total revenue. The independent recomputation correctly filters for IDR, resulting in a different total. Additionally, there are duplicate entries in the payments table that may further complicate the accuracy of the revenue calculation.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'\"\n}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 1376,
+      "completion_tokens": 145,
+      "total_tokens": 1521,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "service_tier": "default",
+    "system_fingerprint": "fp_73c73d24da"
+  }
+}

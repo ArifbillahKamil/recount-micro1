@@ -1,7 +1,7 @@
 {
   "cassette_key": "17d8f452490b2d012c7096c6d03696d9",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:16:27Z",
+  "recorded_at": "2026-08-29T01:30:52Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI1yYFJCVaKLAnLnMazwBaSAeJjrG",
+    "id": "chatcmpl-EI2CVn9CG39QAgb8IEVowhGxzcmhQ",
     "object": "chat.completion",
-    "created": 1787966206,
+    "created": 1787967071,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"wrong_aggregation_grain\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review joins the 'payments' table, which is not necessary for calculating the total units sold from completed orders. The independent recomputation, which only joins 'order_items' and 'orders', returned a different total, indicating a discrepancy in the aggregation.\",\n  \"corrected_sql\": \"SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"mixed_unit_aggregation\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review joins the payments table, which is not necessary for calculating the total units sold from completed orders. The independent recomputation, which excludes the payments table, returned a different total, indicating a discrepancy in the aggregation.\",\n  \"corrected_sql\": \"SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1032,
-      "completion_tokens": 129,
-      "total_tokens": 1161,
+      "completion_tokens": 121,
+      "total_tokens": 1153,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0
@@ -55,6 +55,6 @@
       }
     },
     "service_tier": "default",
-    "system_fingerprint": "fp_f92f00b8af"
+    "system_fingerprint": "fp_f56c486beb"
   }
 }

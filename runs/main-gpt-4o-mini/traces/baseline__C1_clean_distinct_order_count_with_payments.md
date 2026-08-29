@@ -1,6 +1,6 @@
 # Trajectory — baseline — C1_clean_distinct_order_count_with_payments
 
-`1` model calls (`0` replayed from cassette) · `0` tool calls · `911` tokens · `$0.00018`
+`1` model calls (`0` replayed from cassette) · `0` tool calls · `913` tokens · `$0.00019`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 803 in / 108 out · 1.67s
+`gpt-4o-mini` · live call · 803 in / 110 out · 2.31s
 
 **system**
 
@@ -130,19 +130,19 @@ actually lives at that finer grain.
 {
   "verdict": "CLEAN",
   "bug_type": null,
-  "confidence": 1,
-  "explanation": "The query correctly counts the number of completed orders from the 'orders' table and sums the captured payment amounts from the 'payments' table. The join between 'orders' and 'payments' ensures that only completed orders with corresponding payments are considered. Thus, it accurately answers the business question regarding the number of completed orders and the total amount captured.",
+  "confidence": 0.95,
+  "explanation": "The query correctly counts the number of completed orders from the 'orders' table and sums the captured payment amounts from the 'payments' table. The join between 'orders' and 'payments' ensures that only completed orders with corresponding payments are considered. The aggregation accurately reflects the business question regarding the total number of completed orders and the total amount captured.",
   "corrected_sql": null
 }
 ```
 
 ## 3. gate · final
 
-**CLEAN** — The query correctly counts the number of completed orders from the 'orders' table and sums the captured payment amounts from the 'payments' table. The join between 'orders' and 'payments' ensures that only completed orders with corresponding payments are considered. Thus, it accurately answers the business question regarding the number of completed orders and the total amount captured.
+**CLEAN** — The query correctly counts the number of completed orders from the 'orders' table and sums the captured payment amounts from the 'payments' table. The join between 'orders' and 'payments' ensures that only completed orders with corresponding payments are considered. The aggregation accurately reflects the business question regarding the total number of completed orders and the total amount captured.
 
 ```json
 {
   "bug_type": null,
-  "confidence": 1.0
+  "confidence": 0.95
 }
 ```

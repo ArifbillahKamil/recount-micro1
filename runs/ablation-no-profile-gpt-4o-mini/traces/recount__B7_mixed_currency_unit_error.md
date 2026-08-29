@@ -1,6 +1,6 @@
 # Trajectory — recount — B7_mixed_currency_unit_error
 
-`3` model calls (`0` replayed from cassette) · `6` tool calls · `3402` tokens · `$0.00080`
+`3` model calls (`0` replayed from cassette) · `6` tool calls · `3452` tokens · `$0.00082`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -29,7 +29,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · live call · 593 in / 74 out · 1.20s
+`gpt-4o-mini` · live call · 597 in / 74 out · 1.41s
 
 **system**
 
@@ -112,8 +112,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 idr_revenue_cents
@@ -126,7 +126,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'", "reasoning": "The query sums the payment amounts for completed orders in IDR, ensuring we only capture the relevant revenue."}
+{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'", "reasoning": "The query sums the payment amounts for completed orders in IDR, ensuring we only capture the relevant revenue."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -134,7 +134,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
+SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'
 ```
 
 **response**
@@ -147,7 +147,7 @@ idr_revenue_cents
 
 ## 5. model · plan
 
-`gpt-4o-mini` · live call · 826 in / 408 out · 4.49s
+`gpt-4o-mini` · live call · 826 in / 433 out · 4.84s
 
 **system**
 
@@ -269,28 +269,28 @@ out, do not propose a fan-out hypothesis about it.
 {
   "hypotheses": [
     {
-      "risk": "The query may include payments from orders that are not in IDR currency",
+      "risk": "The query may include payments from orders that are not in IDR currency.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) FROM orders o WHERE o.status = 'completed' AND o.currency != 'IDR'",
-      "settles": "A count greater than 0 would confirm this issue, while a count of 0 would rule it out"
+      "probe_sql": "SELECT COUNT(*) FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency != 'IDR'",
+      "settles": "A count greater than 0 would confirm this issue, while a count of 0 would rule it out."
     },
     {
-      "risk": "The query may include payments for refunded orders",
+      "risk": "The query may include payments from orders that have been refunded.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT SUM(p.amount_cents) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.order_id IN (SELECT order_id FROM refunds)",
-      "settles": "A non-zero sum would confirm this issue, while a sum of 0 would rule it out"
+      "probe_sql": "SELECT SUM(p.amount_cents) FROM orders o JOIN payments p ON p.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.refund_id IS NOT NULL",
+      "settles": "A non-zero sum would confirm this issue, while a sum of 0 would rule it out."
     },
     {
-      "risk": "The query may not account for the possibility of multiple payments per order",
-      "bug_type": "wrong_aggregation_grain",
+      "risk": "The query may not account for the possibility of multiple payments for a single order.",
+      "bug_type": "fanout_join",
       "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(p.payment_id) AS total_payments FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If distinct_orders is less than total_payments, it would confirm this issue, while equality would rule it out"
+      "settles": "If total_payments is greater than distinct_orders, it would confirm this issue, while equality would rule it out."
     },
     {
-      "risk": "The query may include payments that are not completed due to a timing issue",
-      "bug_type": "timezone_day_boundary",
-      "probe_sql": "SELECT COUNT(*) FROM payments p WHERE p.paid_ts < (SELECT MIN(order_ts) FROM orders o WHERE o.status = 'completed')",
-      "settles": "A count greater than 0 would confirm this issue, while a count of 0 would rule it out"
+      "risk": "The query may include payments that are not completed due to a null status in the orders table.",
+      "bug_type": "null_swallowing_predicate",
+      "probe_sql": "SELECT COUNT(*) FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status IS NULL",
+      "settles": "A count greater than 0 would confirm this issue, while a count of 0 would rule it out."
     }
   ]
 }
@@ -301,7 +301,7 @@ out, do not propose a fan-out hypothesis about it.
 **request**
 
 ```sql
-SELECT COUNT(*) FROM orders o WHERE o.status = 'completed' AND o.currency != 'IDR'
+SELECT COUNT(*) FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency != 'IDR'
 ```
 
 **response**
@@ -309,7 +309,7 @@ SELECT COUNT(*) FROM orders o WHERE o.status = 'completed' AND o.currency != 'ID
 ```
 COUNT(*)
 --------
-117     
+145     
 ```
 
 ## 7. tool · `run_sql` · probe_2 · ok
@@ -317,7 +317,7 @@ COUNT(*)
 **request**
 
 ```sql
-SELECT SUM(p.amount_cents) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.order_id IN (SELECT order_id FROM refunds)
+SELECT SUM(p.amount_cents) FROM orders o JOIN payments p ON p.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.refund_id IS NOT NULL
 ```
 
 **response**
@@ -349,7 +349,7 @@ distinct_orders | total_payments
 **request**
 
 ```sql
-SELECT COUNT(*) FROM payments p WHERE p.paid_ts < (SELECT MIN(order_ts) FROM orders o WHERE o.status = 'completed')
+SELECT COUNT(*) FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status IS NULL
 ```
 
 **response**
@@ -357,12 +357,12 @@ SELECT COUNT(*) FROM payments p WHERE p.paid_ts < (SELECT MIN(order_ts) FROM ord
 ```
 COUNT(*)
 --------
-2       
+106     
 ```
 
 ## 10. model · adjudicate
 
-`gpt-4o-mini` · live call · 1342 in / 159 out · 2.40s
+`gpt-4o-mini` · live call · 1367 in / 155 out · 2.03s
 
 **system**
 
@@ -452,37 +452,37 @@ CREATE TABLE sessions (
 );
 
 Probes you designed, and what executing them actually returned:
-[1] risk: The query may include payments from orders that are not in IDR currency
-    probe: SELECT COUNT(*) FROM orders o WHERE o.status = 'completed' AND o.currency != 'IDR'
+[1] risk: The query may include payments from orders that are not in IDR currency.
+    probe: SELECT COUNT(*) FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency != 'IDR'
     returned:
     COUNT(*)
     --------
-    117     
+    145     
 
-[2] risk: The query may include payments for refunded orders
-    probe: SELECT SUM(p.amount_cents) FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.order_id IN (SELECT order_id FROM refunds)
+[2] risk: The query may include payments from orders that have been refunded.
+    probe: SELECT SUM(p.amount_cents) FROM orders o JOIN payments p ON p.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.refund_id IS NOT NULL
     returned:
     SUM(p.amount_cents)
     -------------------
     86825000           
 
-[3] risk: The query may not account for the possibility of multiple payments per order
+[3] risk: The query may not account for the possibility of multiple payments for a single order.
     probe: SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(p.payment_id) AS total_payments FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
     returned:
     distinct_orders | total_payments
     ----------------+---------------
     1018            | 1250          
 
-[4] risk: The query may include payments that are not completed due to a timing issue
-    probe: SELECT COUNT(*) FROM payments p WHERE p.paid_ts < (SELECT MIN(order_ts) FROM orders o WHERE o.status = 'completed')
+[4] risk: The query may include payments that are not completed due to a null status in the orders table.
+    probe: SELECT COUNT(*) FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status IS NULL
     returned:
     COUNT(*)
     --------
-    2       
+    106     
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
+  sql: SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'
   returned:
     idr_revenue_cents
     -----------------
@@ -533,16 +533,12 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query under review does not filter payments based on the currency being 'IDR', which leads to the inclusion of payments from orders in other currencies. Additionally, it does not account for refunds, which could inflate the revenue figure. The independent recomputation correctly filters for 'IDR' currency and completed orders.",
-  "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed' AND o.order_id NOT IN (SELECT order_id FROM refunds)"
+  "explanation": "The query includes payments from orders that are not in IDR currency, as indicated by the probe that found 145 such cases. Additionally, the independent recomputation returned a different total revenue, suggesting that the original query does not accurately filter for completed orders in IDR. The payments table is joined with the orders table without ensuring the currency is IDR.",
+  "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'"
 }
 ```
 
-## 11. note · correction
-
-The reviewer's correction and the independent derivation disagree on the corrected value; both are reported.
-
-## 12. gate · verification_gate
+## 11. gate · verification_gate
 
 **BUG** — an independently derived query returns a different number, demonstrating the discrepancy
 

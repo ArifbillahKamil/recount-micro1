@@ -1,6 +1,6 @@
 # Trajectory — recount — B1_fanout_payments_via_line_items
 
-`2` model calls (`1` replayed from cassette) · `2` tool calls · `1819` tokens · `$0.00036`
+`2` model calls (`1` replayed from cassette) · `2` tool calls · `1822` tokens · `$0.00036`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -30,7 +30,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 586 in / 69 out · 0.00s
+`gpt-4o-mini` · replayed · 590 in / 68 out · 0.00s
 
 **system**
 
@@ -113,8 +113,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 captured_cents
@@ -127,7 +127,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the payment amounts for orders that have a status of 'completed', ensuring we only capture the revenue from successfully completed transactions."}
+{"sql": "SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the payment amounts for orders that have a status of 'completed', ensuring we only capture the revenue from finalized transactions."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -152,7 +152,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1045 in / 119 out · 1.94s
+`gpt-4o-mini` · live call · 1045 in / 119 out · 2.33s
 
 **system**
 

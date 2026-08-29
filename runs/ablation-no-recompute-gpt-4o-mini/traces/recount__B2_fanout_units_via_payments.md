@@ -1,6 +1,6 @@
 # Trajectory — recount — B2_fanout_units_via_payments
 
-`2` model calls (`1` replayed from cassette) · `7` tool calls · `2848` tokens · `$0.00070`
+`2` model calls (`1` replayed from cassette) · `6` tool calls · `2995` tokens · `$0.00072`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -34,6 +34,10 @@ units_sold
     "order_items",
     "orders",
     "payments"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -78,7 +82,7 @@ Independent recomputation disabled for this run.
 
 ## 4. model · plan
 
-`gpt-4o-mini` · replayed · 877 in / 474 out · 0.00s
+`gpt-4o-mini` · replayed · 877 in / 517 out · 0.00s
 
 **system**
 
@@ -169,28 +173,28 @@ out, do not propose a fan-out hypothesis about it.
 {
   "hypotheses": [
     {
-      "risk": "The join between orders and payments may include incomplete or duplicate payment records.",
+      "risk": "The join between orders and payments may include orders that are not completed due to the presence of multiple payments per order.",
       "bug_type": "fanout_join",
-      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(DISTINCT p.order_id) AS distinct_payments FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If distinct_orders is greater than distinct_payments, it confirms the issue; if they are equal, it rules it out."
+      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT p.order_id) AS payment_orders FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'",
+      "settles": "If completed_orders is less than payment_orders, it indicates that some completed orders are being counted multiple times due to multiple payments."
     },
     {
-      "risk": "The join between orders and order_items may include duplicate order items due to multiple items per order.",
+      "risk": "The join between orders and order_items may include orders that are not completed due to the presence of multiple order items per order.",
       "bug_type": "fanout_join",
-      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(oi.order_item_id) AS total_order_items FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If total_order_items is greater than distinct_orders, it confirms the issue; if they are equal, it rules it out."
+      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT oi.order_id) AS order_items_orders FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'",
+      "settles": "If completed_orders is less than order_items_orders, it indicates that some completed orders are being counted multiple times due to multiple order items."
     },
     {
-      "risk": "Some completed orders may not have corresponding payment records, leading to an undercount of units sold.",
+      "risk": "The query may be counting orders that have been refunded but still have a completed status.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) AS total_completed_orders, COUNT(DISTINCT p.order_id) AS total_paid_orders FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If total_completed_orders is greater than total_paid_orders, it confirms the issue; if they are equal, it rules it out."
+      "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT r.order_id) AS refunded_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed'",
+      "settles": "If completed_orders is greater than refunded_orders, it indicates that refunds are not affecting the count of completed orders."
     },
     {
-      "risk": "The query may be aggregating quantities incorrectly due to multiple products per order item.",
-      "bug_type": "wrong_aggregation_grain",
-      "probe_sql": "SELECT SUM(oi.quantity) AS total_units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If this total differs from the original query's result, it confirms the issue; if they are the same, it rules it out."
+      "risk": "The query may be counting units sold from orders that are not fully paid due to the presence of multiple payments.",
+      "bug_type": "mixed_unit_aggregation",
+      "probe_sql": "SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT o.order_id) AS completed_orders FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' GROUP BY o.order_id",
+      "settles": "If total_units_sold is significantly higher than the expected units sold based on completed_orders, it indicates that the aggregation is mixing units from multiple payments."
     }
   ]
 }
@@ -201,15 +205,15 @@ out, do not propose a fan-out hypothesis about it.
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(DISTINCT p.order_id) AS distinct_payments FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
+SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT p.order_id) AS payment_orders FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
 ```
 
 **response**
 
 ```
-distinct_orders | distinct_payments
-----------------+------------------
-1018            | 1018             
+completed_orders | payment_orders
+-----------------+---------------
+1018             | 1018          
 ```
 
 ## 6. tool · `run_sql` · probe_2 · ok
@@ -217,15 +221,15 @@ distinct_orders | distinct_payments
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(oi.order_item_id) AS total_order_items FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
+SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT oi.order_id) AS order_items_orders FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
 ```
 
 **response**
 
 ```
-distinct_orders | total_order_items
-----------------+------------------
-1018            | 2169             
+completed_orders | order_items_orders
+-----------------+-------------------
+1018             | 1018              
 ```
 
 ## 7. tool · `run_sql` · probe_3 · ok
@@ -233,15 +237,15 @@ distinct_orders | total_order_items
 **request**
 
 ```sql
-SELECT COUNT(*) AS total_completed_orders, COUNT(DISTINCT p.order_id) AS total_paid_orders FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
+SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT r.order_id) AS refunded_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed'
 ```
 
 **response**
 
 ```
-total_completed_orders | total_paid_orders
------------------------+------------------
-1250                   | 1018             
+completed_orders | refunded_orders
+-----------------+----------------
+1018             | 17             
 ```
 
 ## 8. tool · `run_sql` · probe_4 · ok
@@ -249,20 +253,33 @@ total_completed_orders | total_paid_orders
 **request**
 
 ```sql
-SELECT SUM(oi.quantity) AS total_units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'
+SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT o.order_id) AS completed_orders FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' GROUP BY o.order_id
 ```
 
 **response**
 
 ```
-total_units_sold
-----------------
-2993            
+total_units_sold | completed_orders
+-----------------+-----------------
+3                | 1               
+5                | 1               
+2                | 1               
+3                | 1               
+1                | 1               
+4                | 1               
+3                | 1               
+1                | 1               
+3                | 1               
+3                | 1               
+5                | 1               
+2                | 1               
+... 188 more row(s)
+... truncated at 200 rows
 ```
 
 ## 9. model · adjudicate
 
-`gpt-4o-mini` · live call · 1362 in / 135 out · 1.91s
+`gpt-4o-mini` · live call · 1515 in / 86 out · 1.51s
 
 **system**
 
@@ -321,33 +338,46 @@ payments: 1683 rows, one row per payment_id
   method: TEXT, 4 distinct
 
 Probes you designed, and what executing them actually returned:
-[1] risk: The join between orders and payments may include incomplete or duplicate payment records.
-    probe: SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(DISTINCT p.order_id) AS distinct_payments FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
+[1] risk: The join between orders and payments may include orders that are not completed due to the presence of multiple payments per order.
+    probe: SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT p.order_id) AS payment_orders FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
     returned:
-    distinct_orders | distinct_payments
-    ----------------+------------------
-    1018            | 1018             
+    completed_orders | payment_orders
+    -----------------+---------------
+    1018             | 1018          
 
-[2] risk: The join between orders and order_items may include duplicate order items due to multiple items per order.
-    probe: SELECT COUNT(DISTINCT o.order_id) AS distinct_orders, COUNT(oi.order_item_id) AS total_order_items FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
+[2] risk: The join between orders and order_items may include orders that are not completed due to the presence of multiple order items per order.
+    probe: SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT oi.order_id) AS order_items_orders FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
     returned:
-    distinct_orders | total_order_items
-    ----------------+------------------
-    1018            | 2169             
+    completed_orders | order_items_orders
+    -----------------+-------------------
+    1018             | 1018              
 
-[3] risk: Some completed orders may not have corresponding payment records, leading to an undercount of units sold.
-    probe: SELECT COUNT(*) AS total_completed_orders, COUNT(DISTINCT p.order_id) AS total_paid_orders FROM orders o LEFT JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed'
+[3] risk: The query may be counting orders that have been refunded but still have a completed status.
+    probe: SELECT COUNT(DISTINCT o.order_id) AS completed_orders, COUNT(DISTINCT r.order_id) AS refunded_orders FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed'
     returned:
-    total_completed_orders | total_paid_orders
-    -----------------------+------------------
-    1250                   | 1018             
+    completed_orders | refunded_orders
+    -----------------+----------------
+    1018             | 17             
 
-[4] risk: The query may be aggregating quantities incorrectly due to multiple products per order item.
-    probe: SELECT SUM(oi.quantity) AS total_units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'
+[4] risk: The query may be counting units sold from orders that are not fully paid due to the presence of multiple payments.
+    probe: SELECT SUM(oi.quantity) AS total_units_sold, COUNT(DISTINCT o.order_id) AS completed_orders FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' GROUP BY o.order_id
     returned:
-    total_units_sold
-    ----------------
-    2993            
+    total_units_sold | completed_orders
+    -----------------+-----------------
+    3                | 1               
+    5                | 1               
+    2                | 1               
+    3                | 1               
+    1                | 1               
+    4                | 1               
+    3                | 1               
+    1                | 1               
+    3                | 1               
+    3                | 1               
+    5                | 1               
+    2                | 1               
+    ... 188 more row(s)
+    ... truncated at 200 rows
 
 Independent recomputation: not attempted.
 
@@ -388,37 +418,14 @@ actually lives at that finer grain.
 
 ```json
 {
-  "verdict": "BUG",
-  "bug_type": "mixed_unit_aggregation",
-  "confidence": 0.8,
-  "explanation": "The query aggregates quantities from order_items while filtering on completed orders from the orders table. However, the independent probe indicates that the total units sold from order_items for completed orders is 2993, which does not match the reported 3648, suggesting an issue with how the quantities are being aggregated.",
-  "corrected_sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'"
+  "verdict": "CLEAN",
+  "bug_type": null,
+  "confidence": 0.9,
+  "explanation": "The query correctly sums the quantities from order_items for completed orders, and the probes confirm that the joins do not introduce any discrepancies. The counts of completed orders match across the relevant tables, indicating that the data integrity is maintained.",
+  "corrected_sql": null
 }
 ```
 
-## 10. tool · `run_sql` · gate_execute_correction · ok
+## 10. gate · verification_gate
 
-**request**
-
-```sql
-SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'
-```
-
-**response**
-
-```
-units_sold
-----------
-2993      
-```
-
-## 11. gate · verification_gate
-
-**BUG** — the correction executes and returns a different result, so the discrepancy is demonstrated
-
-```json
-{
-  "reported": "units_sold\n----------\n3648      ",
-  "corrected": "units_sold\n----------\n2993      "
-}
-```
+**CLEAN** — no bug claimed, so no correction is required

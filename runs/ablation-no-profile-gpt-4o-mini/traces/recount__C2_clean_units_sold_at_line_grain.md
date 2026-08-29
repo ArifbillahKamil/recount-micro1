@@ -1,6 +1,6 @@
 # Trajectory — recount — C2_clean_units_sold_at_line_grain
 
-`3` model calls (`0` replayed from cassette) · `6` tool calls · `3303` tokens · `$0.00076`
+`3` model calls (`0` replayed from cassette) · `6` tool calls · `3472` tokens · `$0.00084`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -29,7 +29,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · live call · 577 in / 70 out · 1.49s
+`gpt-4o-mini` · live call · 581 in / 70 out · 1.27s
 
 **system**
 
@@ -112,8 +112,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 units_sold
@@ -147,7 +147,7 @@ units_sold
 
 ## 5. model · plan
 
-`gpt-4o-mini` · live call · 804 in / 441 out · 8.88s
+`gpt-4o-mini` · live call · 804 in / 527 out · 10.86s
 
 **system**
 
@@ -269,66 +269,34 @@ out, do not propose a fan-out hypothesis about it.
 {
   "hypotheses": [
     {
-      "risk": "The join between orders and order_items may include incomplete or incorrect data due to missing order statuses.",
-      "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) FROM orders WHERE status IS NULL OR status != 'completed'",
-      "settles": "A count greater than 0 would confirm this, while a count of 0 would rule it out."
-    },
-    {
-      "risk": "The quantity in order_items may include null or negative values that are not accounted for in the sum.",
-      "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) FROM order_items WHERE quantity IS NULL OR quantity < 0",
-      "settles": "A count greater than 0 would confirm this, while a count of 0 would rule it out."
-    },
-    {
-      "risk": "The join may result in duplicate rows if there are multiple order_items for the same order, leading to inflated units sold.",
+      "risk": "The join between orders and order_items may result in duplicate counts if an order has multiple items.",
       "bug_type": "fanout_join",
       "probe_sql": "SELECT COUNT(DISTINCT o.order_id) AS unique_orders, COUNT(oi.order_item_id) AS total_order_items FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'",
-      "settles": "If unique_orders is less than total_order_items, it would confirm this, while equality would rule it out."
+      "settles": "If unique_orders equals total_order_items, then there is no fanout issue. If unique_orders is less than total_order_items, it indicates a fanout problem."
     },
     {
-      "risk": "The query may not account for orders that have been refunded, leading to an overestimation of units sold.",
-      "bug_type": "other",
-      "probe_sql": "SELECT SUM(oi.quantity) AS units_sold_after_refunds FROM order_items oi JOIN orders o ON oi.order_id = o.order_id LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status = 'completed' AND r.refund_id IS NULL",
-      "settles": "If this number is significantly lower than 2993, it would confirm this, while a similar number would rule it out."
+      "risk": "Some completed orders may not have any associated order items, leading to an undercount of units sold.",
+      "bug_type": "null_swallowing_predicate",
+      "probe_sql": "SELECT COUNT(*) AS completed_orders_without_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' AND oi.order_item_id IS NULL",
+      "settles": "If the count is greater than 0, it indicates that there are completed orders without items, which would undercount units sold. If the count is 0, this risk is ruled out."
+    },
+    {
+      "risk": "The query does not account for refunds, which could reduce the total units sold.",
+      "bug_type": "missing_filter",
+      "probe_sql": "SELECT SUM(oi.quantity) AS net_units_sold FROM orders o JOIN order_items oi ON oi.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.refund_id IS NULL",
+      "settles": "If net_units_sold is less than 2993, it indicates that refunds are not being accounted for. If it equals 2993, refunds are not affecting the count."
+    },
+    {
+      "risk": "The query does not filter by currency, which could lead to incorrect aggregation if there are mixed currencies.",
+      "bug_type": "mixed_unit_aggregation",
+      "probe_sql": "SELECT currency, SUM(oi.quantity) AS units_sold_per_currency FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' GROUP BY currency",
+      "settles": "If there are multiple currencies returned, it indicates that the aggregation is mixed. If only one currency is returned, this risk is ruled out."
     }
   ]
 }
 ```
 
 ## 6. tool · `run_sql` · probe_1 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) FROM orders WHERE status IS NULL OR status != 'completed'
-```
-
-**response**
-
-```
-COUNT(*)
---------
-482     
-```
-
-## 7. tool · `run_sql` · probe_2 · ok
-
-**request**
-
-```sql
-SELECT COUNT(*) FROM order_items WHERE quantity IS NULL OR quantity < 0
-```
-
-**response**
-
-```
-COUNT(*)
---------
-0       
-```
-
-## 8. tool · `run_sql` · probe_3 · ok
 
 **request**
 
@@ -344,25 +312,58 @@ unique_orders | total_order_items
 1018          | 2169             
 ```
 
-## 9. tool · `run_sql` · probe_4 · ok
+## 7. tool · `run_sql` · probe_2 · ok
 
 **request**
 
 ```sql
-SELECT SUM(oi.quantity) AS units_sold_after_refunds FROM order_items oi JOIN orders o ON oi.order_id = o.order_id LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status = 'completed' AND r.refund_id IS NULL
+SELECT COUNT(*) AS completed_orders_without_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' AND oi.order_item_id IS NULL
 ```
 
 **response**
 
 ```
-units_sold_after_refunds
-------------------------
-2945                    
+completed_orders_without_items
+------------------------------
+0                             
+```
+
+## 8. tool · `run_sql` · probe_3 · ok
+
+**request**
+
+```sql
+SELECT SUM(oi.quantity) AS net_units_sold FROM orders o JOIN order_items oi ON oi.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.refund_id IS NULL
+```
+
+**response**
+
+```
+net_units_sold
+--------------
+2945          
+```
+
+## 9. tool · `run_sql` · probe_4 · ok
+
+**request**
+
+```sql
+SELECT currency, SUM(oi.quantity) AS units_sold_per_currency FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' GROUP BY currency
+```
+
+**response**
+
+```
+currency | units_sold_per_currency
+---------+------------------------
+IDR      | 2609                   
+USD      | 384                    
 ```
 
 ## 10. model · adjudicate
 
-`gpt-4o-mini` · live call · 1331 in / 80 out · 1.38s
+`gpt-4o-mini` · live call · 1389 in / 101 out · 1.43s
 
 **system**
 
@@ -452,33 +453,34 @@ CREATE TABLE sessions (
 );
 
 Probes you designed, and what executing them actually returned:
-[1] risk: The join between orders and order_items may include incomplete or incorrect data due to missing order statuses.
-    probe: SELECT COUNT(*) FROM orders WHERE status IS NULL OR status != 'completed'
-    returned:
-    COUNT(*)
-    --------
-    482     
-
-[2] risk: The quantity in order_items may include null or negative values that are not accounted for in the sum.
-    probe: SELECT COUNT(*) FROM order_items WHERE quantity IS NULL OR quantity < 0
-    returned:
-    COUNT(*)
-    --------
-    0       
-
-[3] risk: The join may result in duplicate rows if there are multiple order_items for the same order, leading to inflated units sold.
+[1] risk: The join between orders and order_items may result in duplicate counts if an order has multiple items.
     probe: SELECT COUNT(DISTINCT o.order_id) AS unique_orders, COUNT(oi.order_item_id) AS total_order_items FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed'
     returned:
     unique_orders | total_order_items
     --------------+------------------
     1018          | 2169             
 
-[4] risk: The query may not account for orders that have been refunded, leading to an overestimation of units sold.
-    probe: SELECT SUM(oi.quantity) AS units_sold_after_refunds FROM order_items oi JOIN orders o ON oi.order_id = o.order_id LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status = 'completed' AND r.refund_id IS NULL
+[2] risk: Some completed orders may not have any associated order items, leading to an undercount of units sold.
+    probe: SELECT COUNT(*) AS completed_orders_without_items FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' AND oi.order_item_id IS NULL
     returned:
-    units_sold_after_refunds
-    ------------------------
-    2945                    
+    completed_orders_without_items
+    ------------------------------
+    0                             
+
+[3] risk: The query does not account for refunds, which could reduce the total units sold.
+    probe: SELECT SUM(oi.quantity) AS net_units_sold FROM orders o JOIN order_items oi ON oi.order_id = o.order_id LEFT JOIN refunds r ON r.order_id = o.order_id WHERE o.status = 'completed' AND r.refund_id IS NULL
+    returned:
+    net_units_sold
+    --------------
+    2945          
+
+[4] risk: The query does not filter by currency, which could lead to incorrect aggregation if there are mixed currencies.
+    probe: SELECT currency, SUM(oi.quantity) AS units_sold_per_currency FROM orders o JOIN order_items oi ON oi.order_id = o.order_id WHERE o.status = 'completed' GROUP BY currency
+    returned:
+    currency | units_sold_per_currency
+    ---------+------------------------
+    IDR      | 2609                   
+    USD      | 384                    
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
@@ -532,8 +534,8 @@ actually lives at that finer grain.
 {
   "verdict": "CLEAN",
   "bug_type": null,
-  "confidence": 0.9,
-  "explanation": "The query correctly sums the quantity of order_items associated with completed orders from the orders table. The independent recomputation corroborates the result of the original query, indicating consistency in the data retrieval process.",
+  "confidence": 0.95,
+  "explanation": "The query correctly sums the quantity of order items associated with completed orders from the orders and order_items tables. The independent recomputation corroborates the result, confirming that the total units sold is accurately reported. Additionally, there are no completed orders without items, and the potential impact of refunds has been considered.",
   "corrected_sql": null
 }
 ```

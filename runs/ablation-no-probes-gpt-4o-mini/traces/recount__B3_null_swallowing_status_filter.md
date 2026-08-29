@@ -1,6 +1,6 @@
 # Trajectory — recount — B3_null_swallowing_status_filter
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1463` tokens · `$0.00030`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1387` tokens · `$0.00029`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -30,6 +30,10 @@ active_orders
 {
   "tables": [
     "orders"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -55,7 +59,7 @@ orders: 1500 rows, one row per order_id
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 440 in / 62 out · 0.00s
+`gpt-4o-mini` · replayed · 364 in / 62 out · 0.00s
 
 **system**
 
@@ -72,27 +76,23 @@ answer independently.
 Business question:
 How many orders are not cancelled? Orders whose status was never stamped by fulfilment are still live business, so count them.
 
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+MEASURED COLUMN FACTS
 
 orders: 1500 rows, one row per order_id
   order_id: INTEGER, pk, 1500 distinct
   customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
+  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
+  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
   currency: TEXT, 2 distinct
+
+Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 active_orders
@@ -105,7 +105,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'", "reasoning": "I counted orders where the status is either NULL (indicating they are still live) or not marked as 'cancelled' to ensure all active orders are included."}
+{"sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'", "reasoning": "I counted all orders where the status is either NULL (indicating they are still live) or not equal to 'cancelled', ensuring I capture all active orders."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -130,7 +130,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 845 in / 116 out · 1.70s
+`gpt-4o-mini` · live call · 845 in / 116 out · 1.89s
 
 **system**
 

@@ -1,6 +1,6 @@
 # Trajectory — recount — C1_clean_distinct_order_count_with_payments
 
-`2` model calls (`1` replayed from cassette) · `2` tool calls · `1856` tokens · `$0.00036`
+`2` model calls (`1` replayed from cassette) · `2` tool calls · `1863` tokens · `$0.00036`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -30,7 +30,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 588 in / 79 out · 0.00s
+`gpt-4o-mini` · replayed · 592 in / 81 out · 0.00s
 
 **system**
 
@@ -113,8 +113,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 orders_seen, captured_cents
@@ -127,7 +127,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status = 'completed'", "reasoning": "The query counts distinct completed orders and sums the payment amounts for those orders, ensuring we only include completed orders in the results."}
+{"sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, SUM(p.amount_cents) AS captured_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status = 'completed'", "reasoning": "The query counts distinct completed orders and sums the payment amounts for those orders, ensuring we only include orders with a 'completed' status."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -152,7 +152,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1081 in / 108 out · 1.49s
+`gpt-4o-mini` · live call · 1081 in / 109 out · 2.39s
 
 **system**
 
@@ -298,7 +298,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "The query correctly counts distinct completed orders from the 'orders' table and sums the corresponding payment amounts from the 'payments' table. Both the recomputation and the original query returned the same results, confirming the accuracy of the metrics. The join between 'orders' and 'payments' is appropriate as it captures the necessary financial data for completed orders.",
+  "explanation": "The query correctly counts distinct completed orders from the 'orders' table and sums the corresponding payment amounts from the 'payments' table. Both the query under review and the independent recomputation returned the same results, confirming the accuracy of the metrics. The join between 'orders' and 'payments' is appropriate as it captures the total amount for completed orders.",
   "corrected_sql": null
 }
 ```

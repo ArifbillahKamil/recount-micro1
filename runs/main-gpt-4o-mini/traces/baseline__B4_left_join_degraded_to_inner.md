@@ -1,6 +1,6 @@
 # Trajectory — baseline — B4_left_join_degraded_to_inner
 
-`1` model calls (`0` replayed from cassette) · `0` tool calls · `955` tokens · `$0.00021`
+`1` model calls (`0` replayed from cassette) · `0` tool calls · `960` tokens · `$0.00021`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 814 in / 141 out · 2.36s
+`gpt-4o-mini` · live call · 814 in / 146 out · 4.76s
 
 **system**
 
@@ -129,20 +129,20 @@ actually lives at that finer grain.
 ```json
 {
   "verdict": "BUG",
-  "bug_type": "missing_filter",
+  "bug_type": "left_join_degraded_to_inner",
   "confidence": 0.9,
-  "explanation": "The query counts all orders but incorrectly filters the refunds with 'WHERE r.amount_cents >= 0', which is unnecessary and could lead to excluding valid refunds. The correct approach is to count all orders and sum the refunds without this filter to ensure all orders are considered, including those with zero refunds.",
+  "explanation": "The query uses a LEFT JOIN between orders and refunds, but the WHERE clause filters out any rows where refunds are NULL, effectively turning it into an INNER JOIN. This means that orders without refunds are not counted, which does not align with the requirement to count all orders, including those that were never refunded.",
   "corrected_sql": "SELECT COUNT(*) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id"
 }
 ```
 
 ## 3. gate · final
 
-**BUG** — The query counts all orders but incorrectly filters the refunds with 'WHERE r.amount_cents >= 0', which is unnecessary and could lead to excluding valid refunds. The correct approach is to count all orders and sum the refunds without this filter to ensure all orders are considered, including those with zero refunds.
+**BUG** — The query uses a LEFT JOIN between orders and refunds, but the WHERE clause filters out any rows where refunds are NULL, effectively turning it into an INNER JOIN. This means that orders without refunds are not counted, which does not align with the requirement to count all orders, including those that were never refunded.
 
 ```json
 {
-  "bug_type": "missing_filter",
+  "bug_type": "left_join_degraded_to_inner",
   "confidence": 0.9
 }
 ```

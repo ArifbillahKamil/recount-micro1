@@ -1,6 +1,6 @@
 # Trajectory — recount — B6_timezone_day_misattribution
 
-`3` model calls (`0` replayed from cassette) · `6` tool calls · `3438` tokens · `$0.00083`
+`3` model calls (`0` replayed from cassette) · `6` tool calls · `3450` tokens · `$0.00083`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -28,7 +28,7 @@ Profiling disabled for this run; the agent sees the schema only.
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · live call · 596 in / 68 out · 1.20s
+`gpt-4o-mini` · live call · 600 in / 68 out · 1.37s
 
 **system**
 
@@ -111,8 +111,8 @@ Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 orders_on_day
@@ -146,7 +146,7 @@ orders_on_day
 
 ## 5. model · plan
 
-`gpt-4o-mini` · live call · 812 in / 472 out · 6.43s
+`gpt-4o-mini` · live call · 812 in / 482 out · 5.68s
 
 **system**
 
@@ -270,25 +270,25 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "The order timestamps are in UTC and not adjusted for the Asia/Jakarta timezone, leading to incorrect date filtering.",
       "bug_type": "timezone_day_boundary",
       "probe_sql": "SELECT COUNT(*) AS orders_on_day_jakarta FROM orders WHERE date(order_ts, 'localtime') = '2026-01-31'",
-      "settles": "If orders_on_day_jakarta is equal to 12, the original query is correct. If it differs, the timezone adjustment is necessary."
+      "settles": "If orders_on_day_jakarta is equal to 12, then the original query is correct. If it differs, then the timezone adjustment is necessary."
     },
     {
-      "risk": "There may be orders with a status that excludes them from being counted, but the query does not filter by status.",
+      "risk": "There may be orders with a status that excludes them from the count, but the query does not filter by status.",
       "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) AS total_orders FROM orders WHERE status IS NOT NULL AND date(order_ts) = '2026-01-31'",
-      "settles": "If total_orders is equal to 12, the original query is correct. If it is greater than 12, the status filter is needed."
+      "probe_sql": "SELECT COUNT(*) AS total_orders FROM orders WHERE date(order_ts) = '2026-01-31' AND status IS NOT NULL",
+      "settles": "If total_orders is less than 12, then the original query may be counting orders that should not be included due to their status."
     },
     {
-      "risk": "The order timestamps may include orders from the previous day or the next day due to timezone differences.",
+      "risk": "The order timestamps may include orders from the previous or next day due to timezone differences.",
       "bug_type": "date_range_truncation",
       "probe_sql": "SELECT COUNT(*) AS orders_on_day_range FROM orders WHERE order_ts >= '2026-01-31T00:00:00+07:00' AND order_ts < '2026-02-01T00:00:00+07:00'",
-      "settles": "If orders_on_day_range is equal to 12, the original query is correct. If it differs, the date range needs adjustment."
+      "settles": "If orders_on_day_range is equal to 12, then the original query is correct. If it differs, then the date range is not accurately capturing the intended orders."
     },
     {
-      "risk": "The order timestamps may not be unique, leading to over-counting if there are duplicate entries.",
+      "risk": "The order timestamps may not be unique, leading to potential double counting if there are multiple entries for the same order.",
       "bug_type": "wrong_aggregation_grain",
-      "probe_sql": "SELECT COUNT(DISTINCT order_id) AS unique_orders FROM orders WHERE date(order_ts) = '2026-01-31'",
-      "settles": "If unique_orders is equal to 12, the original query is correct. If it is less than 12, there are duplicates affecting the count."
+      "probe_sql": "SELECT COUNT(DISTINCT order_id) AS distinct_orders FROM orders WHERE date(order_ts) = '2026-01-31'",
+      "settles": "If distinct_orders is equal to 12, then the original query is correct. If it differs, then there may be duplicate entries affecting the count."
     }
   ]
 }
@@ -315,7 +315,7 @@ orders_on_day_jakarta
 **request**
 
 ```sql
-SELECT COUNT(*) AS total_orders FROM orders WHERE status IS NOT NULL AND date(order_ts) = '2026-01-31'
+SELECT COUNT(*) AS total_orders FROM orders WHERE date(order_ts) = '2026-01-31' AND status IS NOT NULL
 ```
 
 **response**
@@ -347,20 +347,20 @@ orders_on_day_range
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT order_id) AS unique_orders FROM orders WHERE date(order_ts) = '2026-01-31'
+SELECT COUNT(DISTINCT order_id) AS distinct_orders FROM orders WHERE date(order_ts) = '2026-01-31'
 ```
 
 **response**
 
 ```
-unique_orders
--------------
-12           
+distinct_orders
+---------------
+12             
 ```
 
 ## 10. model · adjudicate
 
-`gpt-4o-mini` · live call · 1332 in / 158 out · 2.58s
+`gpt-4o-mini` · live call · 1335 in / 153 out · 1.94s
 
 **system**
 
@@ -456,26 +456,26 @@ Probes you designed, and what executing them actually returned:
     ---------------------
     19                   
 
-[2] risk: There may be orders with a status that excludes them from being counted, but the query does not filter by status.
-    probe: SELECT COUNT(*) AS total_orders FROM orders WHERE status IS NOT NULL AND date(order_ts) = '2026-01-31'
+[2] risk: There may be orders with a status that excludes them from the count, but the query does not filter by status.
+    probe: SELECT COUNT(*) AS total_orders FROM orders WHERE date(order_ts) = '2026-01-31' AND status IS NOT NULL
     returned:
     total_orders
     ------------
     11          
 
-[3] risk: The order timestamps may include orders from the previous day or the next day due to timezone differences.
+[3] risk: The order timestamps may include orders from the previous or next day due to timezone differences.
     probe: SELECT COUNT(*) AS orders_on_day_range FROM orders WHERE order_ts >= '2026-01-31T00:00:00+07:00' AND order_ts < '2026-02-01T00:00:00+07:00'
     returned:
     orders_on_day_range
     -------------------
     18                 
 
-[4] risk: The order timestamps may not be unique, leading to over-counting if there are duplicate entries.
-    probe: SELECT COUNT(DISTINCT order_id) AS unique_orders FROM orders WHERE date(order_ts) = '2026-01-31'
+[4] risk: The order timestamps may not be unique, leading to potential double counting if there are multiple entries for the same order.
+    probe: SELECT COUNT(DISTINCT order_id) AS distinct_orders FROM orders WHERE date(order_ts) = '2026-01-31'
     returned:
-    unique_orders
-    -------------
-    12           
+    distinct_orders
+    ---------------
+    12             
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
@@ -530,7 +530,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "timezone_day_boundary",
   "confidence": 0.9,
-  "explanation": "The query under review does not account for the timezone difference, leading to an incorrect count of orders placed on 31 January 2026. The independent recomputation shows a different count due to proper timezone handling, indicating a discrepancy. The orders table's timestamps are in UTC, which requires adjustment for local time calculations.",
+  "explanation": "The query under review does not account for the timezone difference, leading to an incorrect count of orders placed on 31 January 2026. The independent recomputation shows a different count due to proper timezone handling. The orders table's timestamps are in UTC, which requires adjustment for local time.",
   "corrected_sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31T00:00:00+07:00' AND order_ts < '2026-02-01T00:00:00+07:00'"
 }
 ```

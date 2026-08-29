@@ -1,6 +1,6 @@
 # Trajectory — recount — C3_clean_null_safe_active_orders
 
-`3` model calls (`3` replayed from cassette) · `7` tool calls · `2696` tokens · `$0.00064`
+`3` model calls (`3` replayed from cassette) · `7` tool calls · `2667` tokens · `$0.00065`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -30,6 +30,10 @@ active_orders
 {
   "tables": [
     "orders"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -55,7 +59,7 @@ orders: 1500 rows, one row per order_id
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 432 in / 61 out · 0.00s
+`gpt-4o-mini` · replayed · 356 in / 61 out · 0.00s
 
 **system**
 
@@ -72,27 +76,23 @@ answer independently.
 Business question:
 How many orders are not cancelled? Orders with an unset status count as not cancelled.
 
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+MEASURED COLUMN FACTS
 
 orders: 1500 rows, one row per order_id
   order_id: INTEGER, pk, 1500 distinct
   customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
+  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
+  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
   currency: TEXT, 2 distinct
+
+Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 active_orders
@@ -126,7 +126,7 @@ active_orders
 
 ## 5. model · plan
 
-`gpt-4o-mini` · replayed · 648 in / 387 out · 0.00s
+`gpt-4o-mini` · replayed · 648 in / 394 out · 0.00s
 
 **system**
 
@@ -203,25 +203,25 @@ out, do not propose a fan-out hypothesis about it.
       "risk": "The status column may contain unexpected values that are not accounted for in the query.",
       "bug_type": "missing_filter",
       "probe_sql": "SELECT status, COUNT(*) FROM orders GROUP BY status",
-      "settles": "If there are statuses other than 'cancelled' and NULL, it would confirm the issue. If only 'cancelled', NULL, and 'unknown' are present, it would rule it out."
+      "settles": "If there are statuses other than 'cancelled' and NULL, it confirms the risk; if only 'cancelled', NULL, and 'unknown' are present, it rules it out."
     },
     {
-      "risk": "The COALESCE function may not be handling NULL values as intended.",
+      "risk": "The query may be counting orders with NULL status incorrectly due to the COALESCE function.",
       "bug_type": "null_swallowing_predicate",
-      "probe_sql": "SELECT COUNT(*) AS null_orders FROM orders WHERE status IS NULL",
-      "settles": "If the count of NULL orders is 80, it would confirm the issue. If it is 0, it would rule it out."
+      "probe_sql": "SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL",
+      "settles": "If the count of NULL status orders is 80, it confirms the risk; if it is 0, it rules it out."
     },
     {
-      "risk": "The query may not account for orders with unexpected statuses that are not explicitly filtered.",
-      "bug_type": "missing_filter",
-      "probe_sql": "SELECT COUNT(*) AS unexpected_status_orders FROM orders WHERE status IS NOT NULL AND status <> 'cancelled'",
-      "settles": "If there are unexpected statuses, it would confirm the issue. If the count is 0, it would rule it out."
+      "risk": "The query may not account for orders that are in a transitional state and should not be counted as active.",
+      "bug_type": "other",
+      "probe_sql": "SELECT COUNT(*) AS transitional_orders FROM orders WHERE status IN ('pending', 'processing')",
+      "settles": "If there are transitional orders, it confirms the risk; if there are none, it rules it out."
     },
     {
       "risk": "The query may be affected by the join cardinality with other tables, leading to incorrect counts.",
       "bug_type": "fanout_join",
-      "probe_sql": "SELECT COUNT(DISTINCT order_id) AS distinct_orders FROM orders",
-      "settles": "If the count of distinct orders matches the total number of orders (1500), it would rule out the issue. If it is less, it would confirm the issue."
+      "probe_sql": "SELECT COUNT(DISTINCT order_id) AS distinct_active_orders FROM orders WHERE COALESCE(status, 'unknown') <> 'cancelled'",
+      "settles": "If the distinct count differs from the original count of 1357, it confirms the risk; if they match, it rules it out."
     }
   ]
 }
@@ -252,15 +252,15 @@ refunded  | 89
 **request**
 
 ```sql
-SELECT COUNT(*) AS null_orders FROM orders WHERE status IS NULL
+SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL
 ```
 
 **response**
 
 ```
-null_orders
------------
-80         
+null_status_orders
+------------------
+80                
 ```
 
 ## 8. tool · `run_sql` · probe_3 · ok
@@ -268,15 +268,15 @@ null_orders
 **request**
 
 ```sql
-SELECT COUNT(*) AS unexpected_status_orders FROM orders WHERE status IS NOT NULL AND status <> 'cancelled'
+SELECT COUNT(*) AS transitional_orders FROM orders WHERE status IN ('pending', 'processing')
 ```
 
 **response**
 
 ```
-unexpected_status_orders
-------------------------
-1277                    
+transitional_orders
+-------------------
+170                
 ```
 
 ## 9. tool · `run_sql` · probe_4 · ok
@@ -284,20 +284,20 @@ unexpected_status_orders
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT order_id) AS distinct_orders FROM orders
+SELECT COUNT(DISTINCT order_id) AS distinct_active_orders FROM orders WHERE COALESCE(status, 'unknown') <> 'cancelled'
 ```
 
 **response**
 
 ```
-distinct_orders
----------------
-1500           
+distinct_active_orders
+----------------------
+1357                  
 ```
 
 ## 10. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1091 in / 77 out · 0.00s
+`gpt-4o-mini` · replayed · 1109 in / 99 out · 0.00s
 
 **system**
 
@@ -350,26 +350,26 @@ Probes you designed, and what executing them actually returned:
     pending   | 170     
     refunded  | 89      
 
-[2] risk: The COALESCE function may not be handling NULL values as intended.
-    probe: SELECT COUNT(*) AS null_orders FROM orders WHERE status IS NULL
+[2] risk: The query may be counting orders with NULL status incorrectly due to the COALESCE function.
+    probe: SELECT COUNT(*) AS null_status_orders FROM orders WHERE status IS NULL
     returned:
-    null_orders
-    -----------
-    80         
+    null_status_orders
+    ------------------
+    80                
 
-[3] risk: The query may not account for orders with unexpected statuses that are not explicitly filtered.
-    probe: SELECT COUNT(*) AS unexpected_status_orders FROM orders WHERE status IS NOT NULL AND status <> 'cancelled'
+[3] risk: The query may not account for orders that are in a transitional state and should not be counted as active.
+    probe: SELECT COUNT(*) AS transitional_orders FROM orders WHERE status IN ('pending', 'processing')
     returned:
-    unexpected_status_orders
-    ------------------------
-    1277                    
+    transitional_orders
+    -------------------
+    170                
 
 [4] risk: The query may be affected by the join cardinality with other tables, leading to incorrect counts.
-    probe: SELECT COUNT(DISTINCT order_id) AS distinct_orders FROM orders
+    probe: SELECT COUNT(DISTINCT order_id) AS distinct_active_orders FROM orders WHERE COALESCE(status, 'unknown') <> 'cancelled'
     returned:
-    distinct_orders
-    ---------------
-    1500           
+    distinct_active_orders
+    ----------------------
+    1357                  
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
@@ -424,7 +424,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "The query correctly counts orders that are not cancelled, including those with a NULL status. Both the query under review and the independent recomputation returned the same result of 1357 active orders.",
+  "explanation": "The query correctly counts orders that are not cancelled, including those with a NULL status, which aligns with the business question. Both the original query and the independent recomputation returned the same count of 1357 active orders. The status values were verified, confirming that the query accurately reflects the intended metric.",
   "corrected_sql": null
 }
 ```

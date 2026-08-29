@@ -1,0 +1,60 @@
+{
+  "cassette_key": "c093a15598708e2c407eab2ac455fbc6",
+  "step": "recompute",
+  "recorded_at": "2026-08-29T01:29:26Z",
+  "request": {
+    "model": "gpt-4o-mini",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a senior analytics engineer. You are handed a\nbusiness question and the measured facts about a warehouse, and you write the\nquery that answers it. You are not reviewing anyone's work: you are deriving the\nanswer independently."
+      },
+      {
+        "role": "user",
+        "content": "Business question:\nHow many units did we sell across completed orders?\n\nSCHEMA (no data profiling available)\n\nCREATE TABLE customers (\n    customer_id   INTEGER PRIMARY KEY,\n    name          TEXT    NOT NULL,\n    country       TEXT    NOT NULL,\n    signup_ts     TEXT    NOT NULL   -- ISO-8601 UTC\n);\n\nCREATE TABLE marketing_spend (\n    spend_date  TEXT    NOT NULL,\n    channel     TEXT    NOT NULL,\n    spend_cents INTEGER NOT NULL,\n    PRIMARY KEY (spend_date, channel)\n);\n\nCREATE TABLE order_items (\n    order_item_id    INTEGER PRIMARY KEY,\n    order_id         INTEGER NOT NULL REFERENCES orders(order_id),\n    product_id       INTEGER NOT NULL REFERENCES products(product_id),\n    quantity         INTEGER NOT NULL,\n    unit_price_cents INTEGER NOT NULL\n);\n\nCREATE TABLE orders (\n    order_id    INTEGER PRIMARY KEY,\n    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),\n    order_ts    TEXT    NOT NULL,   -- ISO-8601 UTC\n    status      TEXT,               -- nullable on purpose\n    currency    TEXT    NOT NULL    -- 'IDR' or 'USD'\n);\n\nCREATE TABLE payments (\n    payment_id   INTEGER PRIMARY KEY,\n    order_id     INTEGER NOT NULL REFERENCES orders(order_id),\n    amount_cents INTEGER NOT NULL,\n    paid_ts      TEXT    NOT NULL,\n    method       TEXT    NOT NULL\n);\n\nCREATE TABLE products (\n    product_id       INTEGER PRIMARY KEY,\n    name             TEXT    NOT NULL,\n    category         TEXT    NOT NULL,\n    list_price_cents INTEGER NOT NULL\n);\n\nCREATE TABLE refunds (\n    refund_id    INTEGER PRIMARY KEY,\n    order_id     INTEGER NOT NULL REFERENCES orders(order_id),\n    amount_cents INTEGER NOT NULL,\n    refund_ts    TEXT    NOT NULL,\n    reason       TEXT    NOT NULL\n);\n\nCREATE TABLE sessions (\n    session_id  INTEGER PRIMARY KEY,\n    customer_id INTEGER REFERENCES customers(customer_id),\n    session_ts  TEXT    NOT NULL,\n    channel     TEXT    NOT NULL\n);\n\nWrite a single read-only SQL query that answers this question against this\nSQLite warehouse.\n\nDerive it from the question and the measured facts above. Pay attention to the\ngrain of each measure, to columns that are nullable in practice, and to the\nstored format of any value you compare against.\n\nReturn exactly these columns, in this order, with these names:\nunits_sold\n\nReply with one JSON object and nothing else:\n\n{\"sql\": \"a single SELECT, no semicolon\", \"reasoning\": \"one sentence on the grain and filters you chose\"}"
+      }
+    ],
+    "temperature": 0.0,
+    "max_tokens": 1200,
+    "seed": 7,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "response": {
+    "id": "chatcmpl-EI2B7JharwmGh2GzMuX0wOiDQGcD3",
+    "object": "chat.completion",
+    "created": 1787966985,
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\"sql\": \"SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'\", \"reasoning\": \"The query sums the quantity of order items for orders that have a status of 'completed', ensuring we only count units sold from finalized transactions.\"}",
+          "refusal": null,
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 581,
+      "completion_tokens": 70,
+      "total_tokens": 651,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "service_tier": "default",
+    "system_fingerprint": "fp_4adbad45a5"
+  }
+}

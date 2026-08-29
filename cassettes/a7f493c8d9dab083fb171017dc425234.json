@@ -1,7 +1,7 @@
 {
   "cassette_key": "a7f493c8d9dab083fb171017dc425234",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:15:57Z",
+  "recorded_at": "2026-08-29T01:30:19Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,9 +22,9 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI1y4f1paxePk9VtgpfclDtnE4DmJ",
+    "id": "chatcmpl-EI2ByhBI1vlPT1iaBA1j486AckPHE",
     "object": "chat.completion",
-    "created": 1787966176,
+    "created": 1787967038,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
@@ -55,6 +55,6 @@
       }
     },
     "service_tier": "default",
-    "system_fingerprint": "fp_5259353f0d"
+    "system_fingerprint": "fp_eef938a27b"
   }
 }

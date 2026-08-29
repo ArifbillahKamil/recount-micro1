@@ -1,6 +1,6 @@
 # Trajectory — recount — B2_fanout_units_via_payments
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1910` tokens · `$0.00037`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1789` tokens · `$0.00035`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -34,6 +34,10 @@ units_sold
     "order_items",
     "orders",
     "payments"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -74,7 +78,7 @@ payments: 1683 rows, one row per payment_id
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 634 in / 66 out · 0.00s
+`gpt-4o-mini` · replayed · 525 in / 62 out · 0.00s
 
 **system**
 
@@ -91,14 +95,7 @@ answer independently.
 Business question:
 How many units did we sell on completed orders? Return a single total.
 
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! order_items.product_id -> products.product_id: FANS OUT x54.07 avg, up to x73; 60 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+MEASURED COLUMN FACTS
 
 order_items: 3244 rows, one row per order_item_id
   order_item_id: INTEGER, pk, 3244 distinct
@@ -110,23 +107,25 @@ order_items: 3244 rows, one row per order_item_id
 orders: 1500 rows, one row per order_id
   order_id: INTEGER, pk, 1500 distinct
   customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
+  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
+  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
   currency: TEXT, 2 distinct
 
 payments: 1683 rows, one row per payment_id
   payment_id: INTEGER, pk, 1683 distinct
   order_id: INTEGER, 1357 distinct
   amount_cents: INTEGER, 941 distinct
-  paid_ts: TEXT, 1672 distinct, range 2026-01-01 03:12:00 .. 2026-05-30 03:21:00
+  paid_ts: TEXT, 1672 distinct, values run '2026-01-01 03:12:00' .. '2026-05-30 03:21:00'
   method: TEXT, 4 distinct
+
+Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 units_sold
@@ -139,7 +138,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL", "reasoning": "The query sums the quantity of order items from completed orders, ensuring that only orders with a non-null status are included."}
+{"sql": "SELECT SUM(quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL", "reasoning": "I summed the quantity from order_items where the corresponding orders have a non-null status to count only completed orders."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -147,7 +146,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL
+SELECT SUM(quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL
 ```
 
 **response**
@@ -164,7 +163,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1084 in / 126 out · 1.60s
+`gpt-4o-mini` · live call · 1082 in / 120 out · 1.23s
 
 **system**
 
@@ -227,7 +226,7 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL
+  sql: SELECT SUM(quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL
   returned:
     units_sold
     ----------
@@ -276,18 +275,14 @@ actually lives at that finer grain.
 ```json
 {
   "verdict": "BUG",
-  "bug_type": "missing_filter",
+  "bug_type": "mixed_unit_aggregation",
   "confidence": 0.9,
-  "explanation": "The query under review only counts units sold from completed orders, while the independent recomputation includes all orders with a non-null status. This discrepancy indicates that the filter for completed orders is not correctly applied in the recomputation, leading to a lower count of units sold.",
-  "corrected_sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'"
+  "explanation": "The query under review aggregates units sold from order_items based on completed orders, but the independent recomputation indicates a higher total when considering all non-null statuses. This suggests that the filtering on order status may be excluding relevant data.",
+  "corrected_sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL"
 }
 ```
 
-## 7. note · correction
-
-The reviewer's correction and the independent derivation disagree on the corrected value; both are reported.
-
-## 8. gate · verification_gate
+## 7. gate · verification_gate
 
 **BUG** — an independently derived query returns a different number, demonstrating the discrepancy
 

@@ -1,6 +1,6 @@
 # Trajectory — recount — B4_left_join_degraded_to_inner
 
-`2` model calls (`1` replayed from cassette) · `3` tool calls · `1770` tokens · `$0.00036`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1740` tokens · `$0.00037`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -33,6 +33,10 @@ orders_seen | refunded_cents
   "tables": [
     "orders",
     "refunds"
+  ],
+  "views": [
+    "reviewer",
+    "author"
   ]
 }
 ```
@@ -65,7 +69,7 @@ refunds: 103 rows, one row per refund_id
 
 ## 3. model · recompute
 
-`gpt-4o-mini` · replayed · 539 in / 76 out · 0.00s
+`gpt-4o-mini` · replayed · 465 in / 93 out · 0.00s
 
 **system**
 
@@ -82,34 +86,30 @@ answer independently.
 Business question:
 Across all orders, how many orders are there and what is the total refunded amount? Orders that were never refunded count as zero.
 
-MEASURED WAREHOUSE FACTS
-
-Join cardinality (measured, not inferred):
-  ! order_items.order_id -> orders.order_id: FANS OUT x2.16 avg, up to x4; 1005 parent keys have >1 child row
-  ! orders.customer_id -> customers.customer_id: FANS OUT x3.86 avg, up to x12; 352 parent keys have >1 child row
-  ! payments.order_id -> orders.order_id: FANS OUT x1.24 avg, up to x3; 252 parent keys have >1 child row
-    refunds.order_id -> orders.order_id: one row per parent (safe to join)
+MEASURED COLUMN FACTS
 
 orders: 1500 rows, one row per order_id
   order_id: INTEGER, pk, 1500 distinct
   customer_id: INTEGER, 389 distinct
-  order_ts: TEXT, 1493 distinct, range 2026-01-01 02:11:00 .. 2026-03-31 21:27:00
-  status: TEXT, NULL in 80 rows (5.3%), 4 distinct
+  order_ts: TEXT, 1493 distinct, values run '2026-01-01 02:11:00' .. '2026-03-31 21:27:00'
+  status: TEXT, NULL in 80 rows (5.3%) -- a predicate on this column must handle NULL explicitly, 4 distinct
   currency: TEXT, 2 distinct
 
 refunds: 103 rows, one row per refund_id
   refund_id: INTEGER, pk, 103 distinct
   order_id: INTEGER, 103 distinct
   amount_cents: INTEGER, 99 distinct
-  refund_ts: TEXT, 103 distinct, range 2026-01-02 02:11:00 .. 2026-04-15 07:08:00
+  refund_ts: TEXT, 103 distinct, values run '2026-01-02 02:11:00' .. '2026-04-15 07:08:00'
   reason: TEXT, 4 distinct
+
+Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
 Derive it from the question and the measured facts above. Pay attention to the
-grain of each measure, to columns that are nullable in practice, and to whether
-a join fans out.
+grain of each measure, to columns that are nullable in practice, and to the
+stored format of any value you compare against.
 
 Return exactly these columns, in this order, with these names:
 orders_seen, refunded_cents
@@ -122,7 +122,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(orders.order_id) AS orders_seen, COALESCE(SUM(refunds.amount_cents), 0) AS refunded_cents FROM orders LEFT JOIN refunds ON orders.order_id = refunds.order_id", "reasoning": "The query counts all orders and sums the refunded amounts, ensuring that orders without refunds are included with a zero value."}
+{"sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status IS NOT NULL", "reasoning": "The query counts distinct orders while summing the refunded amounts, ensuring that orders without refunds are counted as zero by using a LEFT JOIN and COALESCE."}
 ```
 
 ## 4. tool · `run_sql` · recompute · ok
@@ -130,7 +130,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT COUNT(orders.order_id) AS orders_seen, COALESCE(SUM(refunds.amount_cents), 0) AS refunded_cents FROM orders LEFT JOIN refunds ON orders.order_id = refunds.order_id
+SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status IS NOT NULL
 ```
 
 **response**
@@ -138,7 +138,7 @@ SELECT COUNT(orders.order_id) AS orders_seen, COALESCE(SUM(refunds.amount_cents)
 ```
 orders_seen | refunded_cents
 ------------+---------------
-1500        | 308416250     
+1420        | 305943750     
 ```
 
 ## 5. note · probes_disabled
@@ -147,7 +147,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 1029 in / 126 out · 2.20s
+`gpt-4o-mini` · live call · 1038 in / 144 out · 3.06s
 
 **system**
 
@@ -202,11 +202,11 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT COUNT(orders.order_id) AS orders_seen, COALESCE(SUM(refunds.amount_cents), 0) AS refunded_cents FROM orders LEFT JOIN refunds ON orders.order_id = refunds.order_id
+  sql: SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status IS NOT NULL
   returned:
     orders_seen | refunded_cents
     ------------+---------------
-    1500        | 308416250     
+    1420        | 305943750     
 
   the query under review returned:
     orders_seen | refunded_cents
@@ -253,18 +253,22 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "wrong_aggregation_grain",
   "confidence": 0.9,
-  "explanation": "The query under review counts only the number of refunds (103) instead of the total number of orders (1500). This discrepancy indicates that the join to the refunds table is incorrectly affecting the count of orders.",
-  "corrected_sql": "SELECT COUNT(*) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id"
+  "explanation": "The query under review counts the number of refunds instead of the total number of orders, leading to a discrepancy in the 'orders_seen' count. The independent recomputation shows a significantly higher count of orders, indicating that the original query does not align with the business question.",
+  "corrected_sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id"
 }
 ```
 
-## 7. gate · verification_gate
+## 7. note · correction
+
+The reviewer's correction and the independent derivation disagree on the corrected value; both are reported.
+
+## 8. gate · verification_gate
 
 **BUG** — an independently derived query returns a different number, demonstrating the discrepancy
 
 ```json
 {
   "reported": "orders_seen | refunded_cents\n------------+---------------\n103         | 308416250     ",
-  "recomputed": "orders_seen | refunded_cents\n------------+---------------\n1500        | 308416250     "
+  "recomputed": "orders_seen | refunded_cents\n------------+---------------\n1420        | 305943750     "
 }
 ```

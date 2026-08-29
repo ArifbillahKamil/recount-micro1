@@ -1,7 +1,7 @@
 {
   "cassette_key": "91c5407ab5183e7725e702b5a3680d02",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:16:40Z",
+  "recorded_at": "2026-08-29T01:31:07Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI1ykaqsJOJgM9tGD4hDQahjl1tLD",
+    "id": "chatcmpl-EI2CkC3VNdiDBdjlAK8CdaJfM9k4M",
     "object": "chat.completion",
-    "created": 1787966218,
+    "created": 1787967086,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.95,\n  \"explanation\": \"The query under review does not filter for completed orders, which is necessary to accurately capture revenue from completed orders only. The independent recomputation correctly includes this filter by checking the status of orders in the 'orders' table.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"missing_filter\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review does not filter for completed orders, which is necessary to accurately calculate revenue from completed orders. The independent recomputation correctly includes this filter, resulting in a different revenue total. The discrepancy indicates that the original query is not aligned with the business question.\",\n  \"corrected_sql\": \"SELECT SUM(p.amount_cents) AS revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1015,
-      "completion_tokens": 117,
-      "total_tokens": 1132,
+      "completion_tokens": 126,
+      "total_tokens": 1141,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0

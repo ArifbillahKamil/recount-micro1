@@ -1,7 +1,7 @@
 {
   "cassette_key": "de6a6d53f123acb095f8cce158c48042",
   "step": "adjudicate",
-  "recorded_at": "2026-08-29T01:16:31Z",
+  "recorded_at": "2026-08-29T01:30:59Z",
   "request": {
     "model": "gpt-4o-mini",
     "messages": [
@@ -22,16 +22,16 @@
     }
   },
   "response": {
-    "id": "chatcmpl-EI1ybDt648ej3afsHowvertIfSLEj",
+    "id": "chatcmpl-EI2CcxxK6vL3RBLEqE49QA5Cc4Iy6",
     "object": "chat.completion",
-    "created": 1787966209,
+    "created": 1787967078,
     "model": "gpt-4o-mini-2024-07-18",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"wrong_aggregation_grain\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review counts orders incorrectly by not using DISTINCT, leading to a significantly lower count of orders seen (103 vs 1500). The aggregation should reflect the total number of unique orders from the 'orders' table, which is not achieved due to the way the join with the 'refunds' table is structured.\",\n  \"corrected_sql\": \"SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id\"\n}",
+          "content": "{\n  \"verdict\": \"BUG\",\n  \"bug_type\": \"wrong_aggregation_grain\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The query under review counts orders based on the refunds table, which leads to a significant discrepancy in the number of orders seen (103 vs 1500). The correct approach should count distinct orders from the orders table, ensuring that all orders are included regardless of whether they have refunds.\",\n  \"corrected_sql\": \"SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id\"\n}",
           "refusal": null,
           "annotations": []
         },
@@ -41,8 +41,8 @@
     ],
     "usage": {
       "prompt_tokens": 1089,
-      "completion_tokens": 155,
-      "total_tokens": 1244,
+      "completion_tokens": 146,
+      "total_tokens": 1235,
       "prompt_tokens_details": {
         "cached_tokens": 0,
         "audio_tokens": 0
