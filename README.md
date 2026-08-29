@@ -32,9 +32,24 @@ Analytics engineers and data analysts at any company that has shipped a
 "ask your data a question" feature — which by now is most BI tools, and every
 team that has wired an LLM to its warehouse.
 
-The person holding the risk is whoever's name is on the number. A analyst
+The person holding the risk is whoever's name is on the number. An analyst
 publishes a revenue figure to a dashboard, a deck, or a board pack. If it is
-wrong, it is their credibility, and the decision made on it was made wrong.
+wrong, it is their credibility, and the decision taken on it was taken wrongly.
+
+**Why this problem is real, stated without embellishment.** I am not an analytics
+engineer, and this report makes no claim about my own experience of the
+bottleneck. The case rests on something checkable instead: on the twelve cases in
+this repository, a current model shown the schema and asked to review a query
+declared a 22% overstatement of units sold to be correct — case `B2`, and you can
+watch it happen with `python3 -m recount.cli --case B2 --offline --baseline`. The
+query runs, returns a plausible figure, and raises nothing. That is the failure
+this project addresses, and it is demonstrated rather than asserted.
+
+The warehouse is synthetic and the faults in it are planted, which is a real
+limit on how far these results generalise. It is also what makes them
+reproducible and the ground truth checkable, and the fault types are the ones any
+analytics engineer will recognise: grain, NULL semantics, join degradation,
+date boundaries, mixed units.
 
 ## The bottleneck
 

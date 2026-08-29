@@ -131,7 +131,15 @@ def main(argv: Optional[list] = None) -> int:
             )
         else:
             result, trace = agent.review(
-                args.db, question, sql, client, case_id=args.case or "adhoc"
+                args.db, question, sql, client,
+                case_id=args.case or "adhoc",
+                # The reported configuration. The warehouse profiler, the probe
+                # loop and the format hints were each measured to cost accuracy
+                # or money without contributing, so the product does not run
+                # them. See the Improvement Changelog in the README.
+                enable_profile=False,
+                enable_probes=False,
+                enable_formats=False,
             )
     except CassetteMiss as exc:
         print(

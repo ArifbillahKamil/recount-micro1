@@ -85,6 +85,13 @@ def evidence_from_historical(h: dict) -> str:
     )
 
 
+def _evidence_or_pending(runs: dict, key: str) -> str:
+    m = runs.get(key)
+    if m is None:
+        return f"_not yet recorded — see `{key.split('/')[0]}`_"
+    return evidence_from(m)
+
+
 def find_main(runs: dict) -> tuple:
     """Locate the reported run, whatever model it was recorded with."""
     for key in runs:
@@ -224,25 +231,39 @@ def changelog_section(runs: dict) -> str:
             "required filter instead of adding to it.",
         ),
         (
-            "**Iteration 4**<br>formats only, profiler and probes deleted",
+            "**Iteration 4**<br>stored value formats, no hazard framing",
             "If naming a hazard makes an author defend against it, give it no "
-            "hazards: only how values are stored. The warehouse profiler and the "
-            "probe loop were removed from the reported path.",
+            "hazards — only how values are stored. This was aimed at the one "
+            "remaining false alarm, where the author compared against "
+            "`'2026-01-01T00:00:00Z'` on values stored `'2026-01-01 02:11:00'`.",
+            _evidence_or_pending(runs, f"ablation-add-formats-{model}/recount"),
+            "**Removed.** It did fix that false alarm, and cost a detection "
+            "doing it: recall fell 100% -> 88%, leaving the system identical to "
+            "the baseline on every metric. A fix that trades a caught fault for "
+            "a quieter report is not a fix.",
+        ),
+        (
+            "**Final**<br>recomputation + gate",
+            "Everything that could not be shown to help was deleted: the "
+            "warehouse profiler, the probe loop, the format hints. What remains "
+            "is the query under review, an independent derivation of the same "
+            "question, and a comparison of the two numbers.",
             evidence_from(rec),
-            "**Final.** This is the configuration reported above.",
+            "**Reported configuration.** Three of the four stages I designed "
+            "were removed by their own measurements.",
         ),
     ]
 
     variants = [
         ("no-recompute", "Remove the recomputation",
-         "the only stage that earns its place"),
+         "the only stage that earned its place"),
         ("no-gate", "Accept the model verdict as-is",
          "what the gate is worth once recomputation exists"),
-        ("no-formats", "Withhold stored value formats",
-         "whether the format hint is load-bearing"),
-        ("add-profile", "Put the warehouse profiler back",
+        ("add-formats", "Restore the stored-value-format hints",
+         "why they were removed"),
+        ("add-profile", "Restore the warehouse profiler",
          "why it was removed"),
-        ("add-probes", "Put the probe loop back",
+        ("add-probes", "Restore the probe loop",
          "why it was removed"),
     ]
 

@@ -132,11 +132,12 @@ def main() -> int:
         print("Or use --dry-run to verify the project without a key.", file=sys.stderr)
         return 2
 
-    # The reported configuration. Arrived at by measurement, not design: the
-    # warehouse profiler and the probe loop were each measured to cost accuracy
-    # or money while contributing nothing, and were removed. What remains is the
-    # independent recomputation, the gate, and stored value formats.
-    REPORTED = ["--no-profile", "--no-probes"]
+    # The reported configuration, arrived at by measurement rather than design.
+    # Three stages were built and then removed because each was measured to cost
+    # accuracy or money while contributing nothing: the warehouse profiler, the
+    # probe loop, and the stored-value-format hints. What survives is the
+    # independent recomputation and the gate.
+    REPORTED = ["--no-profile", "--no-probes", "--no-formats"]
 
     main_label = f"main-{model}"
     variants = [
@@ -144,16 +145,18 @@ def main() -> int:
         ("no-recompute", REPORTED + ["--no-recompute"],
          "drop the independent recomputation"),
         ("no-gate", REPORTED + ["--no-gate"], "accept the model verdict as-is"),
-        ("no-formats", REPORTED + ["--no-formats"],
-         "withhold stored value formats from the author"),
         # Putting back a stage that was removed, to show why it was.
-        ("add-profile", ["--no-probes"], "restore the warehouse profiler"),
-        ("add-probes", ["--no-profile"], "restore the probe loop"),
+        ("add-formats", ["--no-profile", "--no-probes"],
+         "restore the stored-value-format hints"),
+        ("add-profile", ["--no-probes", "--no-formats"],
+         "restore the warehouse profiler"),
+        ("add-probes", ["--no-profile", "--no-formats"],
+         "restore the probe loop"),
     ]
 
     banner(4, total, f"Headline run: baseline vs Recount on {model}")
     run([PY, "-m", "recount.evaluate", "--system", "both", "--model", model,
-         "--record", "--label", main_label] + REPORTED + price)
+         "--label", main_label] + REPORTED + price)
 
     for index, (name, flags, description) in enumerate(variants, start=5):
         banner(index, total, f"Variant: {name} ({description})")
