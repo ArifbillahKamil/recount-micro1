@@ -280,17 +280,19 @@ def changelog_section(runs: dict) -> str:
         ),
     ]
 
+    # (variant label, what it changes, the flags that reproduce it)
+    reported_flags = "--no-profile --no-probes --no-formats"
     variants = [
-        ("no-recompute", "Remove the recomputation",
-         "the only stage that earned its place"),
-        ("no-gate", "Accept the model verdict as-is",
-         "what the gate is worth once recomputation exists"),
-        ("add-formats", "Restore the stored-value-format hints",
-         "why they were removed"),
-        ("add-profile", "Restore the warehouse profiler",
-         "why it was removed"),
-        ("add-probes", "Restore the probe loop",
-         "why it was removed"),
+        ("no-recompute", "Remove the recomputation — the one stage that earned "
+                         "its place", f"{reported_flags} --no-recompute"),
+        ("no-gate", "Accept the model verdict as-is — what the gate is worth "
+                    "once recomputation exists", f"{reported_flags} --no-gate"),
+        ("add-formats", "Restore the stored-value-format hints — why they were "
+                        "removed", "--no-profile --no-probes"),
+        ("add-profile", "Restore the warehouse profiler — why it was removed",
+         "--no-probes --no-formats"),
+        ("add-probes", "Restore the probe loop — why it was removed",
+         "--no-profile --no-formats"),
     ]
 
     out = [
@@ -314,16 +316,20 @@ def changelog_section(runs: dict) -> str:
         "Measured against the reported configuration, on the same cases and the "
         "same model.",
         "",
-        "| variant | what it changes | result |",
+        f"The reported configuration is `{reported_flags}`. Reproduce any row "
+        "offline with `python3 -m recount.evaluate --system recount --offline` "
+        "plus the flags shown.",
+        "",
+        "| what it changes | flags | result |",
         "|---|---|---|",
     ]
     missing = []
-    for name, change, why in variants:
+    for name, change, flags in variants:
         m = variant(runs, name, model)
         if m is None:
             missing.append(name)
             continue
-        out.append(f"| `--{name}` | {change} — {why} | {evidence_from(m)} |")
+        out.append(f"| {change} | `{flags}` | {evidence_from(m)} |")
 
     if missing:
         out.append("")

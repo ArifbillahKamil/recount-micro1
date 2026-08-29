@@ -310,13 +310,15 @@ Each row is a real run. The evidence column is generated from `runs/*/results.js
 
 Measured against the reported configuration, on the same cases and the same model.
 
-| variant | what it changes | result |
+The reported configuration is `--no-profile --no-probes --no-formats`. Reproduce any row offline with `python3 -m recount.evaluate --system recount --offline` plus the flags shown.
+
+| what it changes | flags | result |
 |---|---|---|
-| `--no-recompute` | Remove the recomputation — the only stage that earned its place | F1 55%, recall 38%, 0/4 false alarms, 3/8 repairs, $0.00021/case |
-| `--no-gate` | Accept the model verdict as-is — what the gate is worth once recomputation exists | F1 94%, recall 100%, 1/4 false alarms, 6/8 repairs, $0.00037/case |
-| `--add-formats` | Restore the stored-value-format hints — why they were removed | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00038/case |
-| `--add-profile` | Restore the warehouse profiler — why it was removed | F1 84%, recall 100%, 3/4 false alarms, 5/8 repairs, $0.00034/case |
-| `--add-probes` | Restore the probe loop — why it was removed | F1 94%, recall 100%, 1/4 false alarms, 4/8 repairs, $0.00081/case |
+| Remove the recomputation — the one stage that earned its place | `--no-profile --no-probes --no-formats --no-recompute` | F1 55%, recall 38%, 0/4 false alarms, 3/8 repairs, $0.00021/case |
+| Accept the model verdict as-is — what the gate is worth once recomputation exists | `--no-profile --no-probes --no-formats --no-gate` | F1 94%, recall 100%, 1/4 false alarms, 6/8 repairs, $0.00037/case |
+| Restore the stored-value-format hints — why they were removed | `--no-profile --no-probes` | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00038/case |
+| Restore the warehouse profiler — why it was removed | `--no-probes --no-formats` | F1 84%, recall 100%, 3/4 false alarms, 5/8 repairs, $0.00034/case |
+| Restore the probe loop — why it was removed | `--no-profile --no-formats` | F1 94%, recall 100%, 1/4 false alarms, 4/8 repairs, $0.00081/case |
 
 ### On the gate, which has no measured contribution
 
