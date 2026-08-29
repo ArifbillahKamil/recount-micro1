@@ -107,7 +107,8 @@ No API key and no network needed. The model is scripted, so every gate path is
 checked deterministically.
 
 ```bash
-python3 -m tests.test_pipeline    # 25 checks — gate paths, probe repair, safety
+python3 -m tests.test_pipeline    # 76 checks — gate paths, probe repair, safety,
+                                  #   role-split context, .env, cost accounting
 python3 -m tests.test_harness     # 31 checks — replay, scoring math, artifacts
 ```
 
@@ -236,23 +237,36 @@ prompt only pays for the calls that actually changed.
 
 ## 8. Ablations — reproducing the changelog
 
-Each row of the Improvement Changelog is a real run. These replay the same
-recorded model output with one stage switched off, which is what isolates that
-stage's contribution:
+Every row of the Improvement Changelog is a real run. `run_all.py` produces all
+of them, but each can be run on its own. Switching one stage off is what isolates
+its contribution, rather than asserting it:
 
 ```bash
-# no verification gate: the model's verdict is accepted as-is
-python3 -m recount.evaluate --system recount --offline --no-gate --label no-gate
+# each stage removed in turn
+python3 -m recount.evaluate --system recount --no-profile   --label no-profile
+python3 -m recount.evaluate --system recount --no-probes    --label no-probes
+python3 -m recount.evaluate --system recount --no-recompute --label no-recompute
+python3 -m recount.evaluate --system recount --no-gate      --label no-gate
 
-# no probing: adjudicate from measured facts alone
-python3 -m recount.evaluate --system recount --offline --no-probes --label no-probes
+# the leaner combination that single knockouts pointed at
+python3 -m recount.evaluate --system recount --no-profile --no-probes --label lean
 
 # put any set of runs side by side
 python3 -m recount.evaluate --compare \
-  runs/both-gpt-4o-mini-replay/results.json \
-  runs/no-gate/results.json \
-  runs/no-probes/results.json
+  runs/main-gpt-4o-mini/results.json \
+  runs/ablation-no-profile-gpt-4o-mini/results.json \
+  runs/ablation-no-probes-gpt-4o-mini/results.json \
+  runs/ablation-no-recompute-gpt-4o-mini/results.json \
+  runs/ablation-no-gate-gpt-4o-mini/results.json \
+  runs/ablation-lean-gpt-4o-mini/results.json
 ```
+
+`--no-gate` replays the main run's cassettes, since the prompts are unchanged and
+only the post-processing differs. The others alter a prompt, so they need either
+an API key or their own recorded cassettes.
+
+Committed results and trajectories for each of these live under `runs/`. See
+[TRAJECTORIES.md](TRAJECTORIES.md) for how to read them.
 
 ## What the numbers mean
 

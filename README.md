@@ -302,6 +302,17 @@ python run_all.py --model gpt-4o-mini
 
 Full instructions, expected output, runtime and cost: **[REPRODUCE.md](REPRODUCE.md)**.
 
+## Repository map
+
+| path | what it is |
+|---|---|
+| [REPRODUCE.md](REPRODUCE.md) | clean-machine setup, exact commands, runtime, cost |
+| [TRAJECTORIES.md](TRAJECTORIES.md) | how to read the agent trajectories |
+| [VIDEO.md](VIDEO.md) | script for the solution video |
+| `runs/` | results and one trajectory per case per system, for every run reported here |
+| `cassettes/` | every recorded model response, so the run replays offline for free |
+| `LICENSE` | MIT |
+
 ## Layout
 
 ```
