@@ -274,16 +274,16 @@ Recorded with `gpt-4o-mini` on the 12 bundled cases. Both systems received the s
 | Repair accuracy | 7/8 | 6/8 | -12 pt |
 | Bug type named correctly | 29% | 38% | +9 pt |
 | Cost per case | $0.00019 | $0.00036 | x1.9 |
-| Wall clock per case | 0.0s | 0.0s | - |
+| Wall clock per case | _replayed from cassettes; not a live measurement_ | | |
 | Model calls / tool calls | 12 / 0 | 24 / 24 | - |
 
 ### Reading this honestly
 
 **Recall is the claim worth defending.** The baseline reported 1 of 8 planted faults as correct. Recount reported none as correct. On the stated problem -- a wrong number reaching a report without anyone noticing -- that is the difference that matters.
 
-**The F1 difference is not.** 93% against 94% is a gap of 1 points on 12 cases, where a single case moves F1 by roughly 8 points and the false alarm rate by 25. It is inside the noise of this sample and is reported rather than leaned on. Twelve cases can show that a mechanism works; they cannot rank two systems that are close.
+**The F1 difference is not.** 93% against 94% is a gap of 1 point on 12 cases, where a single case moves F1 by roughly 8 points and the false alarm rate by 25. It is inside the noise of this sample and is reported rather than leaned on. Twelve cases can show that a mechanism works; they cannot rank two systems that are close.
 
-**Cost is a real trade.** Recount costs x1.9 the baseline and takes x0.0 the wall clock, because it executes queries instead of reading them. At a fraction of a cent per verified metric that is worth paying; it is still a cost, not a rounding error to hide.
+**Cost is a real trade.** Recount costs x1.9 the baseline and is slower in wall clock, since it makes two model calls and executes queries where the baseline makes one call and reads. At $0.00036 per verified metric that is worth paying, but it is a cost, not a rounding error to hide.
 
 Full per-case tables, including every explanation, are in [`runs/main-gpt-4o-mini/results.md`](runs/main-gpt-4o-mini/results.md). Trajectories for all 24 runs are in [`runs/main-gpt-4o-mini/traces/`](runs/main-gpt-4o-mini/traces/) -- see [TRAJECTORIES.md](TRAJECTORIES.md).
 <!-- RESULTS:END -->
@@ -317,6 +317,14 @@ Measured against the reported configuration, on the same cases and the same mode
 | `--add-formats` | Restore the stored-value-format hints — why they were removed | F1 93%, recall 88%, 0/4 false alarms, 7/8 repairs, $0.00037/case |
 | `--add-profile` | Restore the warehouse profiler — why it was removed | F1 84%, recall 100%, 3/4 false alarms, 4/8 repairs, $0.00033/case |
 | `--add-probes` | Restore the probe loop — why it was removed | F1 94%, recall 100%, 1/4 false alarms, 6/8 repairs, $0.00081/case |
+
+### On the gate, which has no measured contribution
+
+`--no-gate` returns results identical to the reported configuration, on every metric. The gate did not change a single verdict across the twelve cases, and this is the second rewrite of it. Reporting otherwise would be dishonest, so: **its measured contribution here is zero.**
+
+The reason is not that it is broken but that it became redundant. The adjudicator is shown the recomputation, and it follows the evidence — so by the time the gate runs, the verdict already agrees with what the gate would have enforced.
+
+It is kept for one reason: it turns "the model followed the evidence" from an observation into a guarantee. [`tests/test_pipeline.py`](tests/test_pipeline.py) drives it with constructed model output and shows it overruling a verdict in both directions — withdrawing a bug claim that a recomputation contradicts, and escalating a CLEAN verdict that one disagrees with. On this eval set it never had to. On a set where the model ignores the evidence once, it would. That is a defensible reason to keep a component, and it is not the same as a measured improvement.
 <!-- CHANGELOG:END -->
 
 ---

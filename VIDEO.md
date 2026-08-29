@@ -7,8 +7,9 @@ Record with the repository freshly cloned and `python run_all.py --dry-run`
 already done, so `data/warehouse.db` exists. Everything below runs `--offline`,
 so nothing depends on the network mid-recording and nothing costs anything.
 
-Two numbers are marked `[N]`. Fill them from `runs/main-<model>/results.md` and
-`runs/changelog-table.md` before recording.
+All figures below are the recorded ones from `runs/` on `gpt-4o-mini`. If you
+re-record the evaluation with a different model, refresh them from
+`runs/main-<model>/results.md`.
 
 ---
 
@@ -113,9 +114,10 @@ python -m recount.cli --case C2 --offline
 Say the honest version:
 
 > Recall goes from 88% to 100% — every planted fault caught, including the one
-> the baseline waved through. F1 is [N] against 93%. I'm not going to oversell
-> that second number: on twelve cases one case is eight points, so the F1
-> difference is inside the noise. The recall difference is the claim I'll defend.
+> the baseline waved through. F1 is 94% against 93%. I'm not going to oversell
+> that: one point on twelve cases is a single case, which is inside the noise.
+> The recall difference is the claim I'll defend. And it isn't free — Recount
+> raises one false alarm the baseline doesn't, and costs about twice as much.
 
 **On screen:**
 
@@ -133,17 +135,22 @@ python -m recount.evaluate --system both --offline
 > Four stages, each switched off in turn. That's how you find out what actually
 > helped instead of assuming.
 
-> The one that earned its place is the recomputation. Remove it and F1 drops to
-> [N]. Everything else I built either did nothing or made things worse.
+> The one that earned its place is the recomputation. Remove it and F1 drops
+> from 94 to 67, and recall halves to 50%. Everything else I built either did
+> nothing or made things worse.
 
 > The verification gate — the mechanism I described as the load-bearing idea in
-> my own README — never fired. The no-gate run was byte-identical to the full
-> run. Twice. It could only ever downgrade a bug claim, so it was structurally
-> unable to catch the case that matters most: a real fault waved through.
+> my own README — never fired. The no-gate run is identical to the reported one,
+> on every metric. Twice, across two rewrites. Its measured contribution is
+> zero. I kept it because it makes "the model followed the evidence" a guarantee
+> rather than an observation, and the tests show it overruling verdicts in both
+> directions — but I'm not going to call that an improvement.
 
-> And the experiment I removed: the probe loop. Agent writes hypotheses, runs
-> diagnostic queries. It contributed nothing once recomputation existed —
-> identical on every metric at half the cost. Deleted.
+> Three experiments I removed. The probe loop: agent writes hypotheses, runs
+> diagnostic queries. Identical results at two and a quarter times the cost.
+> The profiler: took F1 from 94 down to 84. And format hints, which fixed my
+> last false alarm and cost me a detection doing it — recall fell back to 88%
+> and the whole system became indistinguishable from the baseline.
 
 ## 4:30 – 5:00 · The hot take
 

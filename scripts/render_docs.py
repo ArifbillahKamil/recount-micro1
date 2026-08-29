@@ -58,6 +58,7 @@ def load_runs() -> dict:
         for system, bundle in payload["systems"].items():
             found[f"{label}/{system}"] = bundle["metrics"]
             found[f"{label}/{system}#cases"] = bundle["cases"]
+            found[f"{label}/{system}#client"] = bundle.get("client", {})
     return found
 
 
@@ -115,6 +116,33 @@ def results_section(runs: dict) -> str:
     model = label[len("main-"):]
     bc, rc = base["confusion"], rec["confusion"]
 
+    # Wall clock is only meaningful when the calls were actually made. A run
+    # served from cassettes finishes in milliseconds, and reporting that as a
+    # latency would be a lie of omission.
+    live = any(
+        (runs.get(f"{label}/{s}#client") or {}).get("live_calls", 0) > 0
+        for s in ("baseline", "recount")
+    )
+    if live:
+        clock_row = (
+            f"| Wall clock per case | {base['latency_per_case_s']:.1f}s | "
+            f"{rec['latency_per_case_s']:.1f}s | - |"
+        )
+        clock_note = (
+            f" and takes about "
+            f"x{rec['latency_per_case_s'] / max(base['latency_per_case_s'], 0.01):.1f} "
+            "the wall clock"
+        )
+    else:
+        clock_row = (
+            "| Wall clock per case | _replayed from cassettes; not a live "
+            "measurement_ | | |"
+        )
+        clock_note = (
+            " and is slower in wall clock, since it makes two model calls and "
+            "executes queries where the baseline makes one call and reads"
+        )
+
     def delta(a, b):
         if a is None or b is None:
             return "n/a"
@@ -147,8 +175,7 @@ def results_section(runs: dict) -> str:
         f"| Cost per case | ${base['cost_per_case_usd']:.5f} | "
         f"${rec['cost_per_case_usd']:.5f} | "
         f"x{rec['cost_per_case_usd'] / base['cost_per_case_usd']:.1f} |",
-        f"| Wall clock per case | {base['latency_per_case_s']:.1f}s | "
-        f"{rec['latency_per_case_s']:.1f}s | - |",
+        clock_row,
         f"| Model calls / tool calls | {base['llm_calls']} / {base['tool_calls']} | "
         f"{rec['llm_calls']} / {rec['tool_calls']} | - |",
         "",
@@ -165,7 +192,8 @@ def results_section(runs: dict) -> str:
     f1_gap = abs((rec["f1"] or 0) - (base["f1"] or 0))
     lines += [
         f"**The F1 difference is not.** {pct(base['f1'])} against "
-        f"{pct(rec['f1'])} is a gap of {100 * f1_gap:.0f} points on 12 cases, "
+        f"{pct(rec['f1'])} is a gap of {100 * f1_gap:.0f} "
+        f"{'point' if round(100 * f1_gap) == 1 else 'points'} on 12 cases, "
         "where a single case moves F1 by roughly 8 points and the false alarm "
         "rate by 25. It is inside the noise of this sample and is reported "
         "rather than leaned on. Twelve cases can show that a mechanism works; "
@@ -173,11 +201,9 @@ def results_section(runs: dict) -> str:
         "",
         "**Cost is a real trade.** Recount costs "
         f"x{rec['cost_per_case_usd'] / base['cost_per_case_usd']:.1f} the "
-        f"baseline and takes "
-        f"x{rec['latency_per_case_s'] / max(base['latency_per_case_s'], 0.01):.1f} "
-        "the wall clock, because it executes queries instead of reading them. "
-        "At a fraction of a cent per verified metric that is worth paying; it is "
-        "still a cost, not a rounding error to hide.",
+        f"baseline{clock_note}. At ${rec['cost_per_case_usd']:.5f} per verified "
+        "metric that is worth paying, but it is a cost, not a rounding error to "
+        "hide.",
         "",
         "Full per-case tables, including every explanation, are in "
         f"[`runs/{label}/results.md`](runs/{label}/results.md). Trajectories for "
@@ -308,6 +334,35 @@ def changelog_section(runs: dict) -> str:
             + model
             + "`."
         )
+
+    no_gate = variant(runs, "no-gate", model)
+    if no_gate is not None and no_gate["f1"] == rec["f1"] and \
+            no_gate["confusion"] == rec["confusion"]:
+        out += [
+            "",
+            "### On the gate, which has no measured contribution",
+            "",
+            "`--no-gate` returns results identical to the reported "
+            "configuration, on every metric. The gate did not change a single "
+            "verdict across the twelve cases, and this is the second rewrite of "
+            "it. Reporting otherwise would be dishonest, so: **its measured "
+            "contribution here is zero.**",
+            "",
+            "The reason is not that it is broken but that it became redundant. "
+            "The adjudicator is shown the recomputation, and it follows the "
+            "evidence — so by the time the gate runs, the verdict already agrees "
+            "with what the gate would have enforced.",
+            "",
+            "It is kept for one reason: it turns \"the model followed the "
+            "evidence\" from an observation into a guarantee. "
+            "[`tests/test_pipeline.py`](tests/test_pipeline.py) drives it with "
+            "constructed model output and shows it overruling a verdict in both "
+            "directions — withdrawing a bug claim that a recomputation "
+            "contradicts, and escalating a CLEAN verdict that one disagrees "
+            "with. On this eval set it never had to. On a set where the model "
+            "ignores the evidence once, it would. That is a defensible reason to "
+            "keep a component, and it is not the same as a measured improvement.",
+        ]
     return "\n".join(out)
 
 
