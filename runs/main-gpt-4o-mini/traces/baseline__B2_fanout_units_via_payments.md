@@ -1,6 +1,6 @@
 # Trajectory — baseline — B2_fanout_units_via_payments
 
-`1` model calls (`0` replayed from cassette) · `0` tool calls · `897` tokens · `$0.00018`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `897` tokens · `$0.00018`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 802 in / 95 out · 1.99s
+`gpt-4o-mini` · replayed · 802 in / 95 out · 0.00s
 
 **system**
 

@@ -1,6 +1,6 @@
 # Trajectory — recount — B2_fanout_units_via_payments
 
-`3` model calls (`1` replayed from cassette) · `7` tool calls · `3508` tokens · `$0.00082`
+`3` model calls (`3` replayed from cassette) · `6` tool calls · `3401` tokens · `$0.00081`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -28,34 +28,13 @@ units_sold
 
 Warehouse profiling disabled; both roles see the schema only.
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "order_items",
-    "orders",
-    "payments"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 696 in / 59 out · 0.00s
+`gpt-4o-mini` · replayed · 581 in / 67 out · 0.00s
 
 **system**
 
@@ -134,13 +113,6 @@ CREATE TABLE sessions (
     channel     TEXT    NOT NULL
 );
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -159,7 +131,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "I summed the quantity of order items from completed orders to get the total units sold."}
+{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of order items from completed orders, ensuring we only count units sold from orders that have been finalized."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -180,7 +152,7 @@ units_sold
 
 ## 6. model · plan
 
-`gpt-4o-mini` · live call · 820 in / 458 out · 4.23s
+`gpt-4o-mini` · replayed · 820 in / 458 out · 0.00s
 
 **system**
 
@@ -396,7 +368,7 @@ COUNT(DISTINCT o.order_id)
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · live call · 1342 in / 133 out · 1.47s
+`gpt-4o-mini` · replayed · 1342 in / 133 out · 0.00s
 
 **system**
 

@@ -1,6 +1,6 @@
 # Trajectory — baseline — C1_clean_distinct_order_count_with_payments
 
-`1` model calls (`0` replayed from cassette) · `0` tool calls · `913` tokens · `$0.00019`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `913` tokens · `$0.00019`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 803 in / 110 out · 3.16s
+`gpt-4o-mini` · replayed · 803 in / 110 out · 0.00s
 
 **system**
 

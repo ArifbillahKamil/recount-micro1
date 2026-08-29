@@ -1,6 +1,6 @@
 # Trajectory — recount — C2_clean_units_sold_at_line_grain
 
-`2` model calls (`0` replayed from cassette) · `4` tool calls · `1640` tokens · `$0.00033`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1559` tokens · `$0.00031`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -67,32 +67,13 @@ orders: 1500 rows, one row per order_id
   currency: TEXT, 2 distinct
 ```
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "order_items",
-    "orders"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 495 in / 69 out · 1.20s
+`gpt-4o-mini` · live call · 421 in / 62 out · 1.27s
 
 **system**
 
@@ -127,12 +108,6 @@ orders: 1500 rows, one row per order_id
 
 Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -151,7 +126,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL", "reasoning": "The query sums the quantity of items sold from completed orders by joining the order_items and orders tables, filtering out any orders with a NULL status."}
+{"sql": "SELECT SUM(quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status IS NOT NULL", "reasoning": "I summed the quantity from order_items where the corresponding orders have a non-null status to count only completed orders."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -176,7 +151,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · live call · 964 in / 112 out · 1.41s
+`gpt-4o-mini` · replayed · 964 in / 112 out · 0.00s
 
 **system**
 

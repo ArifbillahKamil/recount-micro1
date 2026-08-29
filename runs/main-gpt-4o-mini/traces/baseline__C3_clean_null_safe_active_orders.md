@@ -1,6 +1,6 @@
 # Trajectory — baseline — C3_clean_null_safe_active_orders
 
-`1` model calls (`0` replayed from cassette) · `0` tool calls · `883` tokens · `$0.00018`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `883` tokens · `$0.00018`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 776 in / 107 out · 1.58s
+`gpt-4o-mini` · replayed · 776 in / 107 out · 0.00s
 
 **system**
 

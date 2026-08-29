@@ -1,6 +1,6 @@
 # Trajectory — recount — C4_clean_half_open_date_range
 
-`3` model calls (`1` replayed from cassette) · `7` tool calls · `3486` tokens · `$0.00084`
+`3` model calls (`2` replayed from cassette) · `6` tool calls · `3402` tokens · `$0.00082`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -26,31 +26,13 @@ january_orders
 
 Warehouse profiling disabled; both roles see the schema only.
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 654 in / 82 out · 0.00s
+`gpt-4o-mini` · replayed · 580 in / 83 out · 0.00s
 
 **system**
 
@@ -129,12 +111,6 @@ CREATE TABLE sessions (
     channel     TEXT    NOT NULL
 );
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -153,7 +129,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'", "reasoning": "I filtered the orders based on the order_ts to count only those placed in January 2026, ensuring the correct time range in UTC."}
+{"sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'", "reasoning": "The query counts the total number of orders placed in January 2026 by filtering the order timestamps within the specified date range in UTC."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -161,7 +137,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'
+SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'
 ```
 
 **response**
@@ -169,12 +145,12 @@ SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:0
 ```
 january_orders
 --------------
-551           
+557           
 ```
 
 ## 6. model · plan
 
-`gpt-4o-mini` · live call · 801 in / 440 out · 4.77s
+`gpt-4o-mini` · replayed · 801 in / 440 out · 0.00s
 
 **system**
 
@@ -388,7 +364,7 @@ boundary_orders
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · live call · 1332 in / 177 out · 2.35s
+`gpt-4o-mini` · live call · 1334 in / 164 out · 2.23s
 
 **system**
 
@@ -507,11 +483,11 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00'
+  sql: SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'
   returned:
     january_orders
     --------------
-    551           
+    557           
 
   the query under review returned:
     january_orders
@@ -557,18 +533,19 @@ actually lives at that finer grain.
 {
   "verdict": "BUG",
   "bug_type": "timezone_day_boundary",
-  "confidence": 0.8,
-  "explanation": "The query does not account for the 1500 orders that are not in UTC format, which could lead to incorrect date filtering. Additionally, the boundary orders probe indicates that there are 961 orders that fall outside the expected range for January 2026, which may not be included in the count. This suggests that the query may not accurately reflect the total number of orders placed during the specified time frame.",
-  "corrected_sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z' AND order_ts NOT LIKE '%Z'"
+  "confidence": 0.9,
+  "explanation": "The query under review does not account for the potential presence of non-UTC timestamps in the order_ts column, which could lead to incorrect date filtering. Additionally, the recomputation returned a different count than the original query, indicating a discrepancy in the results. The presence of 1500 non-UTC orders and 961 boundary orders suggests that the query may miss some valid orders.",
+  "corrected_sql": "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01T00:00:00Z' AND order_ts < '2026-02-01T00:00:00Z'"
 }
 ```
 
 ## 12. gate · verification_gate
 
-**CLEAN** — a query derived independently from the question returns exactly the reported number, so the bug claim is not supported
+**BUG** — an independently derived query returns a different number, demonstrating the discrepancy
 
 ```json
 {
-  "both_returned": "january_orders\n--------------\n551           "
+  "reported": "january_orders\n--------------\n551           ",
+  "recomputed": "january_orders\n--------------\n557           "
 }
 ```

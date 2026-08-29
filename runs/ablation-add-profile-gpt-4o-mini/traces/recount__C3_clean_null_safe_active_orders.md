@@ -1,6 +1,6 @@
 # Trajectory — recount — C3_clean_null_safe_active_orders
 
-`2` model calls (`0` replayed from cassette) · `4` tool calls · `1416` tokens · `$0.00028`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1343` tokens · `$0.00027`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -57,31 +57,13 @@ orders: 1500 rows, one row per order_id
   currency: TEXT, 2 distinct
 ```
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 430 in / 60 out · 0.96s
+`gpt-4o-mini` · live call · 356 in / 61 out · 1.02s
 
 **system**
 
@@ -109,12 +91,6 @@ orders: 1500 rows, one row per order_id
 
 Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -133,7 +109,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'", "reasoning": "The query counts all orders where the status is either NULL or not equal to 'cancelled', ensuring that we include orders with unset status as not cancelled."}
+{"sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'", "reasoning": "The query counts all orders where the status is either NULL (unset) or not equal to 'cancelled', ensuring we capture all non-cancelled orders."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -158,7 +134,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · live call · 844 in / 82 out · 1.08s
+`gpt-4o-mini` · replayed · 844 in / 82 out · 0.00s
 
 **system**
 

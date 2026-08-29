@@ -1,6 +1,6 @@
 # Trajectory — recount — B8_missing_status_filter
 
-`4` model calls (`1` replayed from cassette) · `8` tool calls · `3610` tokens · `$0.00084`
+`4` model calls (`4` replayed from cassette) · `7` tool calls · `3495` tokens · `$0.00083`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -26,33 +26,13 @@ revenue_cents
 
 Warehouse profiling disabled; both roles see the schema only.
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders",
-    "payments"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 695 in / 67 out · 0.00s
+`gpt-4o-mini` · replayed · 580 in / 67 out · 0.00s
 
 **system**
 
@@ -131,13 +111,6 @@ CREATE TABLE sessions (
     channel     TEXT    NOT NULL
 );
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -177,7 +150,7 @@ revenue_cents
 
 ## 6. model · plan
 
-`gpt-4o-mini` · live call · 797 in / 440 out · 3.65s
+`gpt-4o-mini` · replayed · 797 in / 440 out · 0.00s
 
 **system**
 
@@ -401,7 +374,7 @@ no such column: currency
 
 ## 12. model · probe_repair
 
-`gpt-4o-mini` · live call · 148 in / 27 out · 0.99s
+`gpt-4o-mini` · replayed · 148 in / 27 out · 0.00s
 
 **system**
 
@@ -448,7 +421,7 @@ no such column: payment_currency
 
 ## 14. model · adjudicate
 
-`gpt-4o-mini` · live call · 1298 in / 138 out · 1.72s
+`gpt-4o-mini` · replayed · 1298 in / 138 out · 0.00s
 
 **system**
 

@@ -1,6 +1,6 @@
 # Trajectory — recount — B3_null_swallowing_status_filter
 
-`2` model calls (`0` replayed from cassette) · `3` tool calls · `1835` tokens · `$0.00036`
+`2` model calls (`2` replayed from cassette) · `2` tool calls · `1752` tokens · `$0.00034`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -26,31 +26,13 @@ active_orders
 
 Warehouse profiling disabled; both roles see the schema only.
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 664 in / 65 out · 1.05s
+`gpt-4o-mini` · replayed · 590 in / 56 out · 0.00s
 
 **system**
 
@@ -129,12 +111,6 @@ CREATE TABLE sessions (
     channel     TEXT    NOT NULL
 );
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -153,7 +129,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'", "reasoning": "This query counts all orders that either have a null status (indicating they are still live) or have a status that is not 'cancelled', thus capturing all active orders."}
+{"sql": "SELECT COUNT(*) AS active_orders FROM orders WHERE status IS NULL OR status != 'cancelled'", "reasoning": "I counted all orders where the status is either NULL (indicating they are still live) or not marked as 'cancelled'."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -178,7 +154,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · live call · 991 in / 115 out · 1.33s
+`gpt-4o-mini` · replayed · 991 in / 115 out · 0.00s
 
 **system**
 

@@ -1,6 +1,6 @@
 # Trajectory — recount — B6_timezone_day_misattribution
 
-`2` model calls (`0` replayed from cassette) · `4` tool calls · `1571` tokens · `$0.00034`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1509` tokens · `$0.00034`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -57,31 +57,13 @@ orders: 1500 rows, one row per order_id
   currency: TEXT, 2 distinct
 ```
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 443 in / 93 out · 1.48s
+`gpt-4o-mini` · live call · 369 in / 94 out · 1.99s
 
 **system**
 
@@ -109,12 +91,6 @@ orders: 1500 rows, one row per order_id
 
 Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -133,7 +109,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL", "reasoning": "I filtered the orders based on the timestamp range for 31 January 2026 in the Asia/Jakarta timezone and excluded NULL statuses to count only valid orders."}
+{"sql": "SELECT COUNT(order_id) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL", "reasoning": "I filtered the orders based on the timestamp range for 31 January 2026 in the Asia/Jakarta timezone and excluded any orders with a NULL status."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -141,7 +117,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
+SELECT COUNT(order_id) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
 ```
 
 **response**
@@ -158,7 +134,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · live call · 889 in / 146 out · 1.77s
+`gpt-4o-mini` · live call · 891 in / 155 out · 2.84s
 
 **system**
 
@@ -204,7 +180,7 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
+  sql: SELECT COUNT(order_id) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL
   returned:
     orders_on_day
     -------------
@@ -255,8 +231,8 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "date_range_truncation",
   "confidence": 0.9,
-  "explanation": "The query under review counts orders based on the date of the timestamp, but it does not account for the local timezone of Asia/Jakarta (UTC+7). The independent recomputation correctly filters orders within the specified date range, resulting in a different count.",
-  "corrected_sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL"
+  "explanation": "The query under review counts orders based on the date of the timestamp, but it does not account for the time zone of Asia/Jakarta (UTC+7), which affects the day boundary. The independent recomputation correctly considers the full date range for the specified day, returning a different count.",
+  "corrected_sql": "SELECT COUNT(order_id) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL"
 }
 ```
 

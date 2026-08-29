@@ -1,6 +1,6 @@
 # Trajectory — recount — B8_missing_status_filter
 
-`2` model calls (`0` replayed from cassette) · `4` tool calls · `1742` tokens · `$0.00035`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1617` tokens · `$0.00033`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -65,33 +65,13 @@ payments: 1683 rows, one row per payment_id
   method: TEXT, 4 distinct
 ```
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders",
-    "payments"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 568 in / 83 out · 1.03s
+`gpt-4o-mini` · live call · 453 in / 71 out · 0.99s
 
 **system**
 
@@ -126,13 +106,6 @@ payments: 1683 rows, one row per payment_id
 
 Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -151,7 +124,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.status = 'completed'", "reasoning": "I joined the orders and payments tables on order_id, filtered for completed orders by checking that status is not NULL and equals 'completed', and summed the payment amounts in cents."}
+{"sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.status != 'cancelled'", "reasoning": "The query sums the payment amounts for orders that have a non-null status, ensuring only completed orders are included."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -159,7 +132,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.status = 'completed'
+SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.status != 'cancelled'
 ```
 
 **response**
@@ -167,7 +140,7 @@ SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.o
 ```
 revenue_cents
 -------------
-5468920000   
+6873525000   
 ```
 
 ## 6. note · probes_disabled
@@ -176,7 +149,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · live call · 967 in / 124 out · 1.50s
+`gpt-4o-mini` · live call · 968 in / 125 out · 1.49s
 
 **system**
 
@@ -229,11 +202,11 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.status = 'completed'
+  sql: SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.status != 'cancelled'
   returned:
     revenue_cents
     -------------
-    5468920000   
+    6873525000   
 
   the query under review returned:
     revenue_cents
@@ -279,9 +252,9 @@ actually lives at that finer grain.
 {
   "verdict": "BUG",
   "bug_type": "missing_filter",
-  "confidence": 0.95,
-  "explanation": "The query under review does not filter for completed orders, which is necessary to accurately capture revenue from completed orders only. The independent recomputation correctly includes this filter, resulting in a significantly different revenue amount from the query under review.",
-  "corrected_sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.status = 'completed'"
+  "confidence": 0.9,
+  "explanation": "The query under review does not filter out orders with a NULL status or cancelled orders, which is necessary to accurately capture revenue from completed orders only. The independent recomputation correctly includes this filter, resulting in a different revenue total.",
+  "corrected_sql": "SELECT SUM(p.amount_cents) AS revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.status IS NOT NULL AND o.status != 'cancelled'"
 }
 ```
 
@@ -292,6 +265,6 @@ actually lives at that finer grain.
 ```json
 {
   "reported": "revenue_cents\n-------------\n7301960000   ",
-  "recomputed": "revenue_cents\n-------------\n5468920000   "
+  "recomputed": "revenue_cents\n-------------\n6873525000   "
 }
 ```

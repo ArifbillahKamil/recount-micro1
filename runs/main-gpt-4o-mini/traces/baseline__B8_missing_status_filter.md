@@ -1,6 +1,6 @@
 # Trajectory — baseline — B8_missing_status_filter
 
-`1` model calls (`0` replayed from cassette) · `0` tool calls · `893` tokens · `$0.00019`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `893` tokens · `$0.00019`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 776 in / 117 out · 1.70s
+`gpt-4o-mini` · replayed · 776 in / 117 out · 0.00s
 
 **system**
 

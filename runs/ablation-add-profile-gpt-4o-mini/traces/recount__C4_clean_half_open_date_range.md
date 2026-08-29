@@ -1,6 +1,6 @@
 # Trajectory — recount — C4_clean_half_open_date_range
 
-`2` model calls (`1` replayed from cassette) · `4` tool calls · `1536` tokens · `$0.00033`
+`2` model calls (`2` replayed from cassette) · `3` tool calls · `1464` tokens · `$0.00032`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -57,31 +57,13 @@ orders: 1500 rows, one row per order_id
   currency: TEXT, 2 distinct
 ```
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 428 in / 86 out · 0.00s
+`gpt-4o-mini` · replayed · 354 in / 88 out · 0.00s
 
 **system**
 
@@ -109,12 +91,6 @@ orders: 1500 rows, one row per order_id
 
 Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -133,7 +109,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL", "reasoning": "I filtered the orders based on the timestamp range for January 2026 and excluded any rows where the status is NULL."}
+{"sql": "SELECT COUNT(order_id) AS january_orders FROM orders WHERE order_ts >= '2026-01-01 00:00:00' AND order_ts < '2026-02-01 00:00:00' AND status IS NOT NULL", "reasoning": "I counted the distinct order_ids for the month of January 2026, ensuring to filter out any rows with a NULL status."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -158,7 +134,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · live call · 882 in / 140 out · 1.93s
+`gpt-4o-mini` · replayed · 882 in / 140 out · 0.00s
 
 **system**
 

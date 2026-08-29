@@ -1,6 +1,6 @@
 # Trajectory — recount — C1_clean_distinct_order_count_with_payments
 
-`3` model calls (`1` replayed from cassette) · `7` tool calls · `3657` tokens · `$0.00083`
+`3` model calls (`3` replayed from cassette) · `6` tool calls · `3542` tokens · `$0.00081`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -28,33 +28,13 @@ orders_seen | captured_cents
 
 Warehouse profiling disabled; both roles see the schema only.
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders",
-    "payments"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 702 in / 79 out · 0.00s
+`gpt-4o-mini` · replayed · 587 in / 79 out · 0.00s
 
 **system**
 
@@ -133,13 +113,6 @@ CREATE TABLE sessions (
     channel     TEXT    NOT NULL
 );
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -179,7 +152,7 @@ orders_seen | captured_cents
 
 ## 6. model · plan
 
-`gpt-4o-mini` · live call · 833 in / 443 out · 4.07s
+`gpt-4o-mini` · replayed · 833 in / 443 out · 0.00s
 
 **system**
 
@@ -409,7 +382,7 @@ USD      | 725420000
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · live call · 1502 in / 98 out · 1.21s
+`gpt-4o-mini` · replayed · 1502 in / 98 out · 0.00s
 
 **system**
 

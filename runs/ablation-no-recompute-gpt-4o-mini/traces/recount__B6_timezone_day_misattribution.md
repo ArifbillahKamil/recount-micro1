@@ -1,6 +1,6 @@
 # Trajectory — recount — B6_timezone_day_misattribution
 
-`1` model calls (`0` replayed from cassette) · `3` tool calls · `1050` tokens · `$0.00021`
+`1` model calls (`1` replayed from cassette) · `2` tool calls · `1050` tokens · `$0.00021`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -26,27 +26,9 @@ orders_on_day
 
 Warehouse profiling disabled; both roles see the schema only.
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. note · recompute_disabled
 
@@ -58,7 +40,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 6. model · adjudicate
 
-`gpt-4o-mini` · live call · 930 in / 120 out · 1.48s
+`gpt-4o-mini` · replayed · 930 in / 120 out · 0.00s
 
 **system**
 

@@ -1,6 +1,6 @@
 # Trajectory — recount — B6_timezone_day_misattribution
 
-`2` model calls (`2` replayed from cassette) · `3` tool calls · `1888` tokens · `$0.00037`
+`2` model calls (`2` replayed from cassette) · `2` tool calls · `1796` tokens · `$0.00035`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -26,31 +26,13 @@ orders_on_day
 
 Warehouse profiling disabled; both roles see the schema only.
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 669 in / 91 out · 0.00s
+`gpt-4o-mini` · replayed · 595 in / 68 out · 0.00s
 
 **system**
 
@@ -129,12 +111,6 @@ CREATE TABLE sessions (
     channel     TEXT    NOT NULL
 );
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -153,7 +129,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'", "reasoning": "I filtered the orders based on the order_ts to count only those placed on 31 January 2026 in the Asia/Jakarta timezone, which corresponds to the UTC range specified."}
+{"sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE DATE(order_ts, 'localtime', '+7 hours') = '2026-01-31'", "reasoning": "The query counts the number of orders placed on 31 January 2026 by converting the order timestamp to the Asia/Jakarta timezone."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -161,7 +137,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'
+SELECT COUNT(*) AS orders_on_day FROM orders WHERE DATE(order_ts, 'localtime', '+7 hours') = '2026-01-31'
 ```
 
 **response**
@@ -169,7 +145,7 @@ SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00
 ```
 orders_on_day
 -------------
-12           
+17           
 ```
 
 ## 6. note · probes_disabled
@@ -178,7 +154,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · replayed · 1029 in / 99 out · 0.00s
+`gpt-4o-mini` · replayed · 1015 in / 118 out · 0.00s
 
 **system**
 
@@ -271,11 +247,11 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT COUNT(*) AS orders_on_day FROM orders WHERE order_ts >= '2026-01-31 00:00:00' AND order_ts < '2026-02-01 00:00:00'
+  sql: SELECT COUNT(*) AS orders_on_day FROM orders WHERE DATE(order_ts, 'localtime', '+7 hours') = '2026-01-31'
   returned:
     orders_on_day
     -------------
-    12           
+    17           
 
   the query under review returned:
     orders_on_day
@@ -319,20 +295,21 @@ actually lives at that finer grain.
 
 ```json
 {
-  "verdict": "CLEAN",
-  "bug_type": null,
-  "confidence": 1,
-  "explanation": "The query correctly counts the number of orders placed on 31 January 2026, matching the business question. Both the original query and the independent recomputation returned the same result of 12 orders. The date filtering is appropriately applied to the 'order_ts' field in the 'orders' table.",
-  "corrected_sql": null
+  "verdict": "BUG",
+  "bug_type": "timezone_day_boundary",
+  "confidence": 0.9,
+  "explanation": "The query under review counts orders based on UTC timestamps without adjusting for the Asia/Jakarta timezone (UTC+7). The independent recomputation correctly accounts for the timezone, resulting in a different count of orders on the specified date.",
+  "corrected_sql": "SELECT COUNT(*) AS orders_on_day FROM orders WHERE DATE(order_ts, 'localtime', '+7 hours') = '2026-01-31'"
 }
 ```
 
 ## 8. gate · verification_gate
 
-**CLEAN** — an independently derived query returns the same number, corroborating the reported result
+**BUG** — an independently derived query returns a different number, demonstrating the discrepancy
 
 ```json
 {
-  "both_returned": "orders_on_day\n-------------\n12           "
+  "reported": "orders_on_day\n-------------\n12           ",
+  "recomputed": "orders_on_day\n-------------\n17           "
 }
 ```

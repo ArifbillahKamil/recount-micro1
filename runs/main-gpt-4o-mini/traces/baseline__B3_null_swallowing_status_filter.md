@@ -1,6 +1,6 @@
 # Trajectory — baseline — B3_null_swallowing_status_filter
 
-`1` model calls (`0` replayed from cassette) · `0` tool calls · `889` tokens · `$0.00018`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `889` tokens · `$0.00018`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 777 in / 112 out · 1.87s
+`gpt-4o-mini` · replayed · 777 in / 112 out · 0.00s
 
 **system**
 

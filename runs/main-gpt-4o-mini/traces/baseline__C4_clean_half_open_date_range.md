@@ -1,6 +1,6 @@
 # Trajectory — baseline — C4_clean_half_open_date_range
 
-`1` model calls (`0` replayed from cassette) · `0` tool calls · `875` tokens · `$0.00017`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `875` tokens · `$0.00017`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 783 in / 92 out · 1.46s
+`gpt-4o-mini` · replayed · 783 in / 92 out · 0.00s
 
 **system**
 

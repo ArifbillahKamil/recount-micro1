@@ -1,6 +1,6 @@
 # Trajectory — recount — C2_clean_units_sold_at_line_grain
 
-`3` model calls (`1` replayed from cassette) · `7` tool calls · `3436` tokens · `$0.00080`
+`3` model calls (`2` replayed from cassette) · `6` tool calls · `3373` tokens · `$0.00080`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -27,32 +27,13 @@ units_sold
 
 Warehouse profiling disabled; both roles see the schema only.
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "order_items",
-    "orders"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 650 in / 65 out · 0.00s
+`gpt-4o-mini` · replayed · 576 in / 72 out · 0.00s
 
 **system**
 
@@ -131,12 +112,6 @@ CREATE TABLE sessions (
     channel     TEXT    NOT NULL
 );
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -155,7 +130,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(order_items.quantity) AS units_sold FROM order_items JOIN orders ON order_items.order_id = orders.order_id WHERE orders.status = 'completed'", "reasoning": "I summed the quantity of order items for orders that have a status of 'completed' to get the total units sold."}
+{"sql": "SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the quantity of items sold from the order_items table, filtered by completed orders in the orders table to ensure only finalized sales are counted."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -163,7 +138,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT SUM(order_items.quantity) AS units_sold FROM order_items JOIN orders ON order_items.order_id = orders.order_id WHERE orders.status = 'completed'
+SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'
 ```
 
 **response**
@@ -176,7 +151,7 @@ units_sold
 
 ## 6. model · plan
 
-`gpt-4o-mini` · live call · 799 in / 481 out · 4.49s
+`gpt-4o-mini` · replayed · 799 in / 481 out · 0.00s
 
 **system**
 
@@ -392,7 +367,7 @@ SUM(oi.quantity)
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · live call · 1345 in / 96 out · 1.27s
+`gpt-4o-mini` · live call · 1346 in / 99 out · 1.31s
 
 **system**
 
@@ -513,7 +488,7 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT SUM(order_items.quantity) AS units_sold FROM order_items JOIN orders ON order_items.order_id = orders.order_id WHERE orders.status = 'completed'
+  sql: SELECT SUM(oi.quantity) AS units_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'
   returned:
     units_sold
     ----------
@@ -564,7 +539,7 @@ actually lives at that finer grain.
   "verdict": "CLEAN",
   "bug_type": null,
   "confidence": 1,
-  "explanation": "The query correctly sums the quantities of order items from completed orders, matching the business question. Both the query under review and the independent recomputation returned the same result of 2993 units sold. The checks for potential issues with order statuses and refunds confirm the integrity of the data used.",
+  "explanation": "The query correctly sums the quantities of order items from completed orders, as confirmed by the independent recomputation. Both the query under review and the recomputation returned the same result of 2993 units sold. There are no indications of issues with the joins or filters based on the provided schema and data.",
   "corrected_sql": null
 }
 ```

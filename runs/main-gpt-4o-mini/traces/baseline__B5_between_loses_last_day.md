@@ -1,6 +1,6 @@
 # Trajectory — baseline — B5_between_loses_last_day
 
-`1` model calls (`0` replayed from cassette) · `0` tool calls · `927` tokens · `$0.00020`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `927` tokens · `$0.00020`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 780 in / 147 out · 1.98s
+`gpt-4o-mini` · replayed · 780 in / 147 out · 0.00s
 
 **system**
 

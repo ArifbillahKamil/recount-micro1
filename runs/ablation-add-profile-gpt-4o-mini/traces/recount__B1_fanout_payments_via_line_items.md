@@ -1,6 +1,6 @@
 # Trajectory — recount — B1_fanout_payments_via_line_items
 
-`2` model calls (`0` replayed from cassette) · `4` tool calls · `1938` tokens · `$0.00038`
+`2` model calls (`1` replayed from cassette) · `3` tool calls · `1813` tokens · `$0.00036`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -76,34 +76,13 @@ payments: 1683 rows, one row per payment_id
   method: TEXT, 4 distinct
 ```
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "order_items",
-    "orders",
-    "payments"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 644 in / 76 out · 1.42s
+`gpt-4o-mini` · live call · 529 in / 66 out · 1.71s
 
 **system**
 
@@ -145,13 +124,6 @@ payments: 1683 rows, one row per payment_id
 
 Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -170,7 +142,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status IS NOT NULL", "reasoning": "I joined the payments and orders tables on order_id to sum the amount_cents from payments for orders that have a non-null status, ensuring we only capture completed orders."}
+{"sql": "SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status IS NOT NULL", "reasoning": "This query sums the amount captured from payments for orders that have a non-null status, ensuring we only consider completed orders."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -195,7 +167,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · live call · 1097 in / 121 out · 1.47s
+`gpt-4o-mini` · replayed · 1097 in / 121 out · 0.00s
 
 **system**
 

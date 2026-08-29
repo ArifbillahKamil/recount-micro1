@@ -1,6 +1,6 @@
 # Trajectory — baseline — B4_left_join_degraded_to_inner
 
-`1` model calls (`0` replayed from cassette) · `0` tool calls · `963` tokens · `$0.00021`
+`1` model calls (`1` replayed from cassette) · `0` tool calls · `963` tokens · `$0.00021`
 
 ## 1. note · context
 
@@ -14,7 +14,7 @@ Baseline context is the schema only: no data profiling, no query execution.
 
 ## 2. model · baseline_review
 
-`gpt-4o-mini` · live call · 814 in / 149 out · 2.08s
+`gpt-4o-mini` · replayed · 814 in / 149 out · 0.00s
 
 **system**
 

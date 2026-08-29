@@ -1,6 +1,6 @@
 # Trajectory — recount — B7_mixed_currency_unit_error
 
-`3` model calls (`1` replayed from cassette) · `7` tool calls · `3619` tokens · `$0.00085`
+`3` model calls (`2` replayed from cassette) · `6` tool calls · `3525` tokens · `$0.00085`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -27,33 +27,13 @@ idr_revenue_cents
 
 Warehouse profiling disabled; both roles see the schema only.
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders",
-    "payments"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 707 in / 75 out · 0.00s
+`gpt-4o-mini` · replayed · 592 in / 75 out · 0.00s
 
 **system**
 
@@ -132,13 +112,6 @@ CREATE TABLE sessions (
     channel     TEXT    NOT NULL
 );
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -157,7 +130,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'", "reasoning": "The query sums the payment amounts for completed orders in IDR currency, ensuring we only capture the relevant revenue."}
+{"sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'", "reasoning": "The query sums the payment amounts for completed orders in IDR currency, ensuring we capture only the relevant revenue."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -165,7 +138,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
+SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
 ```
 
 **response**
@@ -178,7 +151,7 @@ idr_revenue_cents
 
 ## 6. model · plan
 
-`gpt-4o-mini` · live call · 821 in / 482 out · 4.11s
+`gpt-4o-mini` · replayed · 821 in / 482 out · 0.00s
 
 **system**
 
@@ -393,7 +366,7 @@ total_orders | total_payments
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · live call · 1409 in / 125 out · 1.90s
+`gpt-4o-mini` · live call · 1409 in / 146 out · 1.64s
 
 **system**
 
@@ -513,7 +486,7 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
+  sql: SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON o.order_id = p.order_id WHERE o.currency = 'IDR' AND o.status = 'completed'
   returned:
     idr_revenue_cents
     -----------------
@@ -564,7 +537,7 @@ actually lives at that finer grain.
   "verdict": "BUG",
   "bug_type": "missing_filter",
   "confidence": 0.9,
-  "explanation": "The query under review does not filter for orders in IDR currency, leading to an inflated revenue total. The independent recomputation correctly filters for IDR orders and returns a different total, indicating a discrepancy.",
+  "explanation": "The query under review does not filter for orders in IDR currency, leading to an inflated revenue total. The independent recomputation confirms that the correct total for IDR-denominated orders is 4,743,500,000 cents, while the original query returned 5,468,920,000 cents.",
   "corrected_sql": "SELECT SUM(p.amount_cents) AS idr_revenue_cents FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.status = 'completed' AND o.currency = 'IDR'"
 }
 ```

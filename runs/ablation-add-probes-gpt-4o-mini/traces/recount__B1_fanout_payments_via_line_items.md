@@ -1,6 +1,6 @@
 # Trajectory — recount — B1_fanout_payments_via_line_items
 
-`3` model calls (`1` replayed from cassette) · `7` tool calls · `3517` tokens · `$0.00083`
+`3` model calls (`3` replayed from cassette) · `6` tool calls · `3404` tokens · `$0.00081`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -28,34 +28,13 @@ captured_cents
 
 Warehouse profiling disabled; both roles see the schema only.
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "order_items",
-    "orders",
-    "payments"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · replayed · 700 in / 67 out · 0.00s
+`gpt-4o-mini` · replayed · 585 in / 69 out · 0.00s
 
 **system**
 
@@ -134,13 +113,6 @@ CREATE TABLE sessions (
     channel     TEXT    NOT NULL
 );
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  payments.paid_ts (TEXT): values are stored like '2026-01-01 03:12:00' through '2026-05-30 03:21:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -159,7 +131,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "I summed the payment amounts for orders that have a status of 'completed' to capture the total money received from those orders."}
+{"sql": "SELECT SUM(p.amount_cents) AS captured_cents FROM payments p JOIN orders o ON p.order_id = o.order_id WHERE o.status = 'completed'", "reasoning": "The query sums the payment amounts for orders that have a status of 'completed', ensuring we only capture the revenue from successfully completed transactions."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -180,7 +152,7 @@ captured_cents
 
 ## 6. model · plan
 
-`gpt-4o-mini` · live call · 827 in / 459 out · 3.64s
+`gpt-4o-mini` · replayed · 827 in / 459 out · 0.00s
 
 **system**
 
@@ -397,7 +369,7 @@ USD
 
 ## 11. model · adjudicate
 
-`gpt-4o-mini` · live call · 1323 in / 141 out · 1.59s
+`gpt-4o-mini` · replayed · 1323 in / 141 out · 0.00s
 
 **system**
 

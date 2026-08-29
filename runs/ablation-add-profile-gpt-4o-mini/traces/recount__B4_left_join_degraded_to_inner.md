@@ -1,6 +1,6 @@
 # Trajectory — recount — B4_left_join_degraded_to_inner
 
-`2` model calls (`0` replayed from cassette) · `4` tool calls · `1840` tokens · `$0.00038`
+`2` model calls (`0` replayed from cassette) · `3` tool calls · `1750` tokens · `$0.00037`
 
 ## 1. tool · `run_sql` · execute_under_review · ok
 
@@ -67,33 +67,13 @@ refunds: 103 rows, one row per refund_id
   reason: TEXT, 4 distinct
 ```
 
-## 3. tool · `profiler.format_hints` · value_formats · ok
+## 3. note · formats_disabled
 
-**request**
-
-```json
-{
-  "tables": [
-    "orders",
-    "refunds"
-  ]
-}
-```
-
-**response**
-
-```
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  refunds.refund_ts (TEXT): values are stored like '2026-01-02 02:11:00' through '2026-04-15 07:08:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-```
+Stored value formats withheld from the author for this run.
 
 ## 4. model · recompute
 
-`gpt-4o-mini` · live call · 580 in / 86 out · 1.34s
+`gpt-4o-mini` · live call · 465 in / 93 out · 1.29s
 
 **system**
 
@@ -128,13 +108,6 @@ refunds: 103 rows, one row per refund_id
 
 Match the stored format exactly when you write a literal. The quoted ranges above show how values are actually stored; comparing against a differently formatted string compares text, not time, and silently selects the wrong rows.
 
-STORED VALUE FORMATS
-
-  orders.order_ts (TEXT): values are stored like '2026-01-01 02:11:00' through '2026-03-31 21:27:00'
-  refunds.refund_ts (TEXT): values are stored like '2026-01-02 02:11:00' through '2026-04-15 07:08:00'
-
-Write literals in exactly this format. A differently formatted string compares as text rather than as a time, and silently selects the wrong rows.
-
 Write a single read-only SQL query that answers this question against this
 SQLite warehouse.
 
@@ -153,7 +126,7 @@ Reply with one JSON object and nothing else:
 **assistant**
 
 ```json
-{"sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id", "reasoning": "This query counts all distinct orders and sums the refunded amounts, ensuring that orders without refunds are counted as zero using a LEFT JOIN and COALESCE."}
+{"sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status IS NOT NULL", "reasoning": "The query counts distinct orders while summing the refunded amounts, ensuring that orders without refunds are counted as zero by using a LEFT JOIN and COALESCE."}
 ```
 
 ## 5. tool · `run_sql` · recompute · ok
@@ -161,7 +134,7 @@ Reply with one JSON object and nothing else:
 **request**
 
 ```sql
-SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id
+SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status IS NOT NULL
 ```
 
 **response**
@@ -169,7 +142,7 @@ SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 
 ```
 orders_seen | refunded_cents
 ------------+---------------
-1500        | 308416250     
+1420        | 305943750     
 ```
 
 ## 6. note · probes_disabled
@@ -178,7 +151,7 @@ Probe stage disabled for this run; adjudicating from measured facts alone.
 
 ## 7. model · adjudicate
 
-`gpt-4o-mini` · live call · 1032 in / 142 out · 1.70s
+`gpt-4o-mini` · live call · 1038 in / 154 out · 2.64s
 
 **system**
 
@@ -233,11 +206,11 @@ Probes you designed, and what executing them actually returned:
 
 An independent recomputation was derived from the business question alone, without seeing the query under review, then executed:
 
-  sql: SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id
+  sql: SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status IS NOT NULL
   returned:
     orders_seen | refunded_cents
     ------------+---------------
-    1500        | 308416250     
+    1420        | 305943750     
 
   the query under review returned:
     orders_seen | refunded_cents
@@ -283,9 +256,9 @@ actually lives at that finer grain.
 {
   "verdict": "BUG",
   "bug_type": "wrong_aggregation_grain",
-  "confidence": 0.95,
-  "explanation": "The query under review counts the number of refunds (103) instead of the total number of orders (1500). This discrepancy arises because the COUNT(*) in the query counts the number of rows in the refunds table instead of the distinct orders in the orders table.",
-  "corrected_sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id"
+  "confidence": 0.9,
+  "explanation": "The query under review counts the number of refunds (103) instead of the total number of orders (1500). The independent recomputation indicates that there are 1420 orders seen, which suggests that the original query is aggregating at the wrong grain by focusing on refunds instead of orders.",
+  "corrected_sql": "SELECT COUNT(DISTINCT o.order_id) AS orders_seen, COALESCE(SUM(r.amount_cents), 0) AS refunded_cents FROM orders o LEFT JOIN refunds r ON o.order_id = r.order_id WHERE o.status IS NOT NULL"
 }
 ```
 
@@ -296,6 +269,6 @@ actually lives at that finer grain.
 ```json
 {
   "reported": "orders_seen | refunded_cents\n------------+---------------\n103         | 308416250     ",
-  "recomputed": "orders_seen | refunded_cents\n------------+---------------\n1500        | 308416250     "
+  "recomputed": "orders_seen | refunded_cents\n------------+---------------\n1420        | 305943750     "
 }
 ```

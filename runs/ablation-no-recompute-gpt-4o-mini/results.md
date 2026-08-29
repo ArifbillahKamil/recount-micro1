@@ -1,6 +1,6 @@
 # Evaluation — ablation-no-recompute-gpt-4o-mini
 
-Model `gpt-4o-mini` · mode `auto` · profile OFF · formats on · probes OFF · gate on
+Model `gpt-4o-mini` · mode `auto` · profile OFF · formats OFF · probes OFF · gate on
 
 Analyst-minute model: confirmed bug +12 min, false alarm -8 min, escalation -4 min, missed bug 0 min (counted as recall, not time)
 
@@ -49,9 +49,9 @@ Analyst-minute model: confirmed bug +12 min, false alarm -8 min, escalation -4 m
   "total_cost_usd": 0.002474,
   "cost_per_case_usd": 0.000206,
   "cost_known": true,
-  "total_latency_s": 17.15,
-  "latency_per_case_s": 1.43,
+  "total_latency_s": 0.03,
+  "latency_per_case_s": 0.0,
   "llm_calls": 12,
-  "tool_calls": 28
+  "tool_calls": 16
 }
 ```
