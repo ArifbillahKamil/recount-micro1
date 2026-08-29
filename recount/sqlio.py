@@ -11,15 +11,42 @@ adversarial, the connection itself cannot write.
 
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
+import time
 from pathlib import Path
 
 MAX_ROWS = 200
 
+# Pin the process timezone before SQLite is used, so that anything resolving
+# against "local" time resolves identically on every machine.
+#
+# This is not hypothetical. An agent-authored query got through carrying
+# `DATE(order_ts, 'localtime', '+7 hours')`, which returned 17 on a machine set
+# to Asia/Jakarta and 19 on one set to UTC. The recorded run and its replay then
+# disagreed, and offline reproduction failed outright on another timezone -- a
+# query that runs, returns a plausible number, and is wrong for reasons invisible
+# in the SQL. Which is the failure this project exists to catch, arriving from
+# inside the project.
+os.environ["TZ"] = "UTC"
+if hasattr(time, "tzset"):
+    time.tzset()
+
 _FORBIDDEN = re.compile(
     r"\b(insert|update|delete|drop|alter|create|replace|truncate|attach|detach|"
     r"vacuum|reindex|pragma|begin|commit|rollback)\b",
+    re.IGNORECASE,
+)
+
+# Constructs whose result depends on when or where the query runs. A metric that
+# changes with the host clock or timezone is not a metric, and it cannot be
+# reproduced. Rejecting these forces an explicit offset such as '+7 hours',
+# which means the same thing everywhere.
+_NON_DETERMINISTIC = re.compile(
+    r"(?:'\s*(?:localtime|utc|now)\s*'"
+    r"|\bcurrent_(?:date|time|timestamp)\b"
+    r"|\brandom(?:blob)?\s*\()",
     re.IGNORECASE,
 )
 
@@ -51,6 +78,15 @@ def assert_read_only(sql: str) -> None:
     match = _FORBIDDEN.search(body)
     if match:
         raise SqlError(f"forbidden keyword in a read-only probe: {match.group(0)!r}")
+
+    match = _NON_DETERMINISTIC.search(body)
+    if match:
+        raise SqlError(
+            f"{match.group(0)!r} makes the result depend on the machine running "
+            "the query, so it cannot be reproduced. Use an explicit offset such "
+            "as date(col, '+7 hours') instead of 'localtime', and a literal date "
+            "instead of 'now'."
+        )
 
 
 def run_sql(db_path: str | Path, sql: str, limit: int = MAX_ROWS) -> dict:

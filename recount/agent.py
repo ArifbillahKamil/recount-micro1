@@ -123,6 +123,10 @@ Derive it from the question and the measured facts above. Pay attention to the
 grain of each measure, to columns that are nullable in practice, and to the
 stored format of any value you compare against.
 
+The result must not depend on where or when the query runs. Do not use
+'localtime', 'now', CURRENT_DATE or random(): use an explicit offset such as
+date(col, '+7 hours') and literal dates.
+
 Return exactly these columns, in this order, with these names:
 {columns}
 
@@ -283,15 +287,55 @@ def _recompute(
         trace.add_note("recompute", "no query was produced")
         return Recompute(reasoning=reasoning, error="no query produced")
 
-    try:
-        result = run_sql(db_path, sql)
-    except SqlError as exc:
-        trace.add_tool("recompute", "run_sql", sql, str(exc), ok=False)
-        return Recompute(sql=sql, reasoning=reasoning, error=str(exc))
+    for attempt in range(2):
+        try:
+            result = run_sql(db_path, sql)
+        except SqlError as exc:
+            trace.add_tool("recompute", "run_sql", sql, str(exc), ok=False)
+            if attempt:
+                return Recompute(sql=sql, reasoning=reasoning, error=str(exc))
+            # One repair round. The error text is specific -- a rejected
+            # non-deterministic function, a misspelled table -- so it is worth
+            # handing straight back rather than abandoning the second opinion.
+            trace.add_note(
+                "recompute_repair",
+                f"The derived query did not run ({exc}); asking for a rewrite.",
+            )
+            try:
+                retry = client.chat(
+                    messages
+                    + [
+                        {"role": "assistant", "content": response.text},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"That query failed to execute:\n\n{exc}\n\n"
+                                "Rewrite it, same intent, same output columns. "
+                                "Reply with one JSON object and nothing else:\n"
+                                '{"sql": "a single SELECT", "reasoning": "one sentence"}'
+                            ),
+                        },
+                    ],
+                    step="recompute_repair",
+                    max_tokens=1200,
+                    trace=trace,
+                )
+                repaired = str(retry.json().get("sql") or "").strip()
+            except LLMError as retry_exc:
+                if isinstance(retry_exc, CassetteMiss):
+                    raise
+                return Recompute(sql=sql, reasoning=reasoning, error=str(exc))
+            if not repaired:
+                return Recompute(sql=sql, reasoning=reasoning, error=str(exc))
+            sql = repaired
+            continue
 
-    rendered = render_result(result)
-    trace.add_tool("recompute", "run_sql", sql, rendered)
-    return Recompute(sql=sql, reasoning=reasoning, result=result, result_text=rendered)
+        rendered = render_result(result)
+        trace.add_tool("recompute", "run_sql", sql, rendered)
+        return Recompute(
+            sql=sql, reasoning=reasoning, result=result, result_text=rendered
+        )
+    return Recompute(sql=sql, reasoning=reasoning, error="could not be executed")
 
 
 def _plan(

@@ -399,10 +399,13 @@ def test_without_recomputation_broken_correction_escalates() -> None:
 
 def test_unrunnable_recomputation_falls_back_gracefully() -> None:
     case = cases.by_id("B1_fanout_payments_via_line_items")
-    result, trace, _ = run(
+    result, trace, client = run(
         case.case_id,
         {
             "recompute": [_recompute_reply("SELECT * FROM table_that_is_absent")],
+            # The repair round is offered one chance and also fails here, which
+            # is what exercises the fallback.
+            "recompute_repair": [_recompute_reply("SELECT * FROM still_absent")],
             "plan": [_plan(_h("fan-out", "SELECT COUNT(*) FROM order_items"))],
             "adjudicate": [
                 {
@@ -421,12 +424,56 @@ def test_unrunnable_recomputation_falls_back_gracefully() -> None:
         result.verdict,
     )
     check(
+        "a repair was attempted before giving up",
+        "recompute_repair" in [c["step"] for c in client.calls],
+        str([c["step"] for c in client.calls]),
+    )
+    check(
         "the fallback is recorded",
         any(
             "no independent recomputation" in str(e.payload.get("text", "")).lower()
             for e in trace.events
             if e.kind == "note"
         ),
+    )
+
+
+def test_rejected_recomputation_is_repaired_from_the_error() -> None:
+    """A host-dependent derivation is rejected, then rewritten and used."""
+    case = cases.by_id("B6_timezone_day_misattribution")
+    result, trace, client = run(
+        case.case_id,
+        {
+            # Exactly what the model produced on the live run.
+            "recompute": [_recompute_reply(
+                "SELECT COUNT(*) AS orders_on_day FROM orders "
+                "WHERE DATE(order_ts, 'localtime', '+7 hours') = '2026-01-31'"
+            )],
+            "recompute_repair": [_recompute_reply(case.reference_sql)],
+            "plan": [_plan(_h("timezone", "SELECT COUNT(*) FROM orders"))],
+            "adjudicate": [
+                {
+                    "verdict": "BUG",
+                    "bug_type": "timezone_day_boundary",
+                    "confidence": 0.9,
+                    "explanation": "UTC day, not the Jakarta day.",
+                    "corrected_sql": case.reference_sql,
+                }
+            ],
+        },
+    )
+    prompt = client.prompt_for("recompute_repair") or ""
+    check(
+        "the rejection reason is fed back",
+        "machine" in prompt.lower() and "localtime" in prompt.lower(),
+        prompt[:200],
+    )
+    check("the repaired derivation is used", result.verdict == V.BUG, result.verdict)
+    check(
+        "and the correction returns the true number",
+        cases.run_sql(DB, result.corrected_sql or "")["rows"]
+        == cases.run_sql(DB, case.reference_sql)["rows"],
+        str(result.corrected_sql),
     )
 
 
@@ -786,6 +833,62 @@ def test_destructive_probe_is_blocked_and_reported() -> None:
     check("the blocked probe is recorded in the trace", len(blocked) >= 1, str(len(blocked)))
 
 
+def test_host_dependent_sql_is_rejected() -> None:
+    """A metric that changes with the host clock or timezone is not a metric.
+
+    Found by cloning the repository fresh and replaying. The recomputation for B6
+    had written `DATE(order_ts, 'localtime', '+7 hours')`, which returned 17 on a
+    machine set to Asia/Jakarta and 19 on one set to UTC. The recorded run and its
+    replay disagreed, and offline reproduction failed outright on a different
+    timezone -- a query that runs, returns a plausible number, and is wrong for
+    reasons invisible in the SQL. Exactly the failure this project exists to
+    catch, arriving from inside the project.
+    """
+    from recount.sqlio import SqlError as _SqlError, run_sql as _run
+
+    hostile = [
+        ("'localtime'", "SELECT COUNT(*) FROM orders "
+                        "WHERE DATE(order_ts,'localtime')='2026-01-31'"),
+        ("'now'", "SELECT COUNT(*) FROM orders WHERE order_ts < datetime('now')"),
+        ("CURRENT_DATE", "SELECT COUNT(*) FROM orders WHERE order_ts < CURRENT_DATE"),
+        ("random()", "SELECT order_id FROM orders ORDER BY random() LIMIT 1"),
+        ("'utc'", "SELECT COUNT(*) FROM orders "
+                  "WHERE datetime(order_ts,'utc') > '2026-01-01'"),
+    ]
+    for name, sql in hostile:
+        try:
+            _run(DB, sql)
+            check(f"{name} is rejected", False, "it executed")
+        except _SqlError as exc:
+            check(f"{name} is rejected", True)
+            check(
+                f"{name} error explains the fix",
+                "machine" in str(exc).lower(),
+                str(exc),
+            )
+
+    # An explicit offset means the same thing everywhere, so it must still work.
+    rows = _run(
+        DB,
+        "SELECT COUNT(*) AS n FROM orders WHERE date(order_ts,'+7 hours')='2026-01-31'",
+    )["rows"]
+    check("an explicit offset is still allowed", rows[0][0] == 19, str(rows))
+
+    # Every reference query in the eval set must itself be reproducible.
+    for case in cases.CASES:
+        for kind, sql in (("sql", case.sql), ("reference_sql", case.reference_sql)):
+            try:
+                _run(DB, sql)
+            except _SqlError as exc:
+                check(f"{case.case_id}.{kind} is host-independent", False, str(exc))
+                break
+        else:
+            continue
+        break
+    else:
+        check("every case query is host-independent", True)
+
+
 def test_warehouse_digest_is_content_based_not_file_based() -> None:
     """Two builds must agree on content, and the digest must not read file bytes.
 
@@ -1073,6 +1176,7 @@ TESTS = [
     test_without_recomputation_bug_without_correction_escalates,
     test_without_recomputation_broken_correction_escalates,
     test_unrunnable_recomputation_falls_back_gracefully,
+    test_rejected_recomputation_is_repaired_from_the_error,
     test_failed_probe_is_repaired_from_tool_feedback,
     test_malformed_verdict_fails_safe,
     test_prose_wrapped_json_is_recovered,
@@ -1082,6 +1186,7 @@ TESTS = [
     test_profile_ablation_falls_back_to_schema_only,
     test_probe_ablation_skips_planning,
     test_destructive_probe_is_blocked_and_reported,
+    test_host_dependent_sql_is_rejected,
     test_warehouse_digest_is_content_based_not_file_based,
     test_empty_response_from_reasoning_model_is_recovered,
     test_cached_prompt_tokens_are_priced_at_the_cached_rate,

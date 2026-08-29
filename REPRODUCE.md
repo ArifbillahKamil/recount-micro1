@@ -107,7 +107,7 @@ No API key and no network needed. The model is scripted, so every gate path is
 checked deterministically.
 
 ```bash
-python3 -m tests.test_pipeline    # 76 checks — gate paths, probe repair, safety,
+python3 -m tests.test_pipeline    # 102 checks — gate paths, probe repair, safety,
                                   #   role-split context, .env, cost accounting
 python3 -m tests.test_harness     # 31 checks — replay, scoring math, artifacts
 ```
@@ -279,6 +279,32 @@ Committed results and trajectories for each of these live under `runs/`. See
 - **Net analyst minutes** is an explicitly modelled estimate, not a measurement.
   The coefficients are printed in every `results.md` and are adjustable with
   `--minutes-saved`, `--minutes-false-alarm`, `--minutes-escalation`.
+
+## Determinism across machines
+
+Results do not depend on where or when you run them, and this is enforced rather
+than hoped for.
+
+* The process timezone is pinned to UTC in `recount/sqlio.py` before SQLite is
+  used.
+* Any query the agent writes containing `'localtime'`, `'now'`, `'utc'`,
+  `CURRENT_DATE`/`TIME`/`TIMESTAMP` or `random()` is rejected, with an error that
+  tells it to use an explicit offset such as `date(col, '+7 hours')`.
+
+Both exist because a real failure got through. An agent-authored query carried
+`DATE(order_ts, 'localtime', '+7 hours')`, which returns **17** on a machine set
+to `Asia/Jakarta` and **19** on one set to UTC. The recorded run and its replay
+then disagreed, and offline reproduction failed outright in a different timezone.
+
+You can confirm the guard yourself:
+
+```bash
+for tz in UTC Asia/Jakarta America/New_York; do
+  TZ=$tz python3 -m tests.test_pipeline | tail -1
+done
+```
+
+All three should report the same count, with no failures.
 
 ## Safety
 
