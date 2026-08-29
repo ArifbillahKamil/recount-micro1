@@ -232,6 +232,88 @@ def test_bug_without_correction_is_supplied_one_by_recomputation() -> None:
     )
 
 
+def test_reviewer_correction_wins_even_when_the_derivation_disagrees() -> None:
+    """The repair the analyst receives should be the more accurate one.
+
+    Measured on gpt-4o-mini: letting the independent derivation override the
+    reviewer's correction gave 3/8 correct repairs, against 7/8 for the
+    reviewer's own answer. Detection and repair are different jobs, and the
+    derivation is only good at the first.
+    """
+    case = cases.by_id("B3_null_swallowing_status_filter")
+    reviewer_fix = (
+        "SELECT COUNT(*) AS active_orders FROM orders "
+        "WHERE status IS NULL OR status <> 'cancelled'"
+    )
+    # A derivation that disagrees with both the original and the reviewer.
+    poor_derivation = "SELECT COUNT(*) AS active_orders FROM orders WHERE status = 'completed'"
+
+    result, trace, _ = run(
+        case.case_id,
+        {
+            "recompute": [_recompute_reply(poor_derivation)],
+            "plan": [_plan(_h("status is nullable", "SELECT COUNT(*) FROM orders"))],
+            "adjudicate": [
+                {
+                    "verdict": "BUG",
+                    "bug_type": "null_swallowing_predicate",
+                    "confidence": 0.9,
+                    "explanation": "NULL status rows are dropped.",
+                    "corrected_sql": reviewer_fix,
+                }
+            ],
+        },
+    )
+    check("verdict is BUG", result.verdict == V.BUG, result.verdict)
+    check(
+        "the reviewer's correction is what the analyst gets",
+        (result.corrected_sql or "").strip() == reviewer_fix,
+        str(result.corrected_sql),
+    )
+    check(
+        "the correction is actually right",
+        cases.run_sql(DB, result.corrected_sql or "")["rows"]
+        == cases.run_sql(DB, case.reference_sql)["rows"],
+    )
+    check(
+        "the competing value is surfaced, not hidden",
+        any("second, independently derived" in e.claim for e in result.evidence),
+        str([e.claim for e in result.evidence]),
+    )
+
+
+def test_correction_that_repairs_nothing_falls_back_to_the_derivation() -> None:
+    case = cases.by_id("B8_missing_status_filter")
+    result, _, _ = run(
+        case.case_id,
+        {
+            "plan": [_plan(_h("no status filter", "SELECT COUNT(*) FROM orders"))],
+            "adjudicate": [
+                {
+                    "verdict": "BUG",
+                    "bug_type": "missing_filter",
+                    "confidence": 0.9,
+                    "explanation": "No status predicate.",
+                    # Identical to the query under review: repairs nothing.
+                    "corrected_sql": " ".join(case.sql.split()),
+                }
+            ],
+        },
+    )
+    check("verdict is BUG", result.verdict == V.BUG, result.verdict)
+    check(
+        "a correction returning the original number is not handed over",
+        " ".join((result.corrected_sql or "").split()) != " ".join(case.sql.split()),
+        str(result.corrected_sql),
+    )
+    check(
+        "the derivation is used instead, and it is right",
+        cases.run_sql(DB, result.corrected_sql or "")["rows"]
+        == cases.run_sql(DB, case.reference_sql)["rows"],
+        str(result.corrected_sql),
+    )
+
+
 def test_reviewer_correction_is_preferred_when_it_corroborates() -> None:
     case = cases.by_id("B5_between_loses_last_day")
     good = "SELECT COUNT(*) AS january_orders FROM orders WHERE order_ts >= '2026-01-01' AND order_ts < '2026-02-01'"
@@ -832,6 +914,8 @@ TESTS = [
     test_no_op_correction_is_downgraded_to_clean,
     test_recomputation_overrules_a_clean_verdict_on_a_real_fault,
     test_bug_without_correction_is_supplied_one_by_recomputation,
+    test_reviewer_correction_wins_even_when_the_derivation_disagrees,
+    test_correction_that_repairs_nothing_falls_back_to_the_derivation,
     test_reviewer_correction_is_preferred_when_it_corroborates,
     test_without_recomputation_bug_without_correction_escalates,
     test_without_recomputation_broken_correction_escalates,

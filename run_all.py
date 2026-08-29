@@ -93,7 +93,7 @@ def main() -> int:
         price = ["--price-in", str(args.price_in), "--price-out", str(args.price_out)]
 
     model = args.model
-    total = 3 if args.dry_run else 9
+    total = 3 if args.dry_run else 10
 
     banner(1, total, "Build the warehouse (deterministic, seeded)")
     run([PY, "-m", "recount.warehouse", "--db", "data/warehouse.db"])
@@ -138,6 +138,11 @@ def main() -> int:
         ("no-probes", ["--no-probes"], "no executed probes"),
         ("no-recompute", ["--no-recompute"], "no independent recomputation"),
         ("no-gate", ["--no-gate"], "model verdict accepted as-is"),
+        # Single knockouts on gpt-4o-mini showed the profiler and the probe loop
+        # each costing accuracy or money while contributing nothing, so the
+        # combination is measured as a candidate final configuration rather than
+        # assumed to be better.
+        ("lean", ["--no-profile", "--no-probes"], "recomputation and gate only"),
     ]
 
     banner(4, total, f"Headline run: baseline vs Recount on {model}")
@@ -149,7 +154,7 @@ def main() -> int:
         run([PY, "-m", "recount.evaluate", "--system", "recount", "--model", model,
              "--label", f"ablation-{name}-{model}"] + flags + price)
 
-    banner(9, total, "Confirm a reviewer with no API key gets the same numbers")
+    banner(10, total, "Confirm a reviewer with no API key gets the same numbers")
     run([PY, "-m", "recount.evaluate", "--system", "both", "--model", model,
          "--offline", "--label", f"verify-offline-{model}"] + price)
 

@@ -617,7 +617,9 @@ def _gate_by_recomputation(
     delta_text, delta_detail = _describe_delta(original_result, recompute.result)
 
     if result.verdict == V.BUG:
-        corrected = _best_correction(db_path, result, recompute)
+        corrected = _best_correction(
+            db_path, trace, result, original_result, recompute
+        )
         trace.add_gate(
             "verification_gate",
             V.BUG,
@@ -666,22 +668,65 @@ def _gate_by_recomputation(
 
 
 def _best_correction(
-    db_path: str | Path, result: V.Verdict, recompute: Recompute
+    db_path: str | Path,
+    trace: Trace,
+    result: V.Verdict,
+    original_result: dict,
+    recompute: Recompute,
 ) -> Optional[str]:
-    """Prefer the reviewer's correction when it corroborates the recomputation.
+    """Choose which corrected query the analyst is handed.
 
-    Two derivations agreeing on the corrected value is stronger than either
-    alone. When they disagree, the independent derivation is used, since it was
-    produced without sight of the faulty query.
+    This preference was originally the other way round -- the independent
+    derivation won unless the reviewer's correction happened to match it -- and
+    it cost real accuracy. Measured on gpt-4o-mini over the eight planted faults,
+    that rule produced 3/8 correct corrections where taking the reviewer's own
+    answer produced 7/8. The independent derivation is a good detector, because
+    disagreeing with the original is enough to prove a discrepancy. It is a
+    weaker repair, because being right requires it to get the whole query right.
+
+    So the reviewer's correction wins whenever it runs and actually changes the
+    number. The derivation is the fallback, and where the two disagree both
+    values are surfaced rather than one being quietly chosen.
     """
     candidate = result.corrected_sql
     if candidate:
         try:
             produced = run_sql(db_path, candidate)
-            if values_match(produced, recompute.result):
-                return candidate
-        except SqlError:
-            pass
+        except SqlError as exc:
+            trace.add_note(
+                "correction",
+                f"The reviewer's correction does not run ({exc}); using the "
+                "independently derived query instead.",
+            )
+            return recompute.sql or None
+
+        if not values_match(produced, original_result):
+            if not values_match(produced, recompute.result):
+                # Two candidate fixes that disagree. Neither is provably right,
+                # so the analyst is told rather than shown only one.
+                result.evidence.append(
+                    V.Evidence(
+                        claim=(
+                            "a second, independently derived query returns a "
+                            "different corrected value -- treat both as "
+                            "candidates until one is confirmed"
+                        ),
+                        sql=recompute.sql or "",
+                        result_text=recompute.result_text,
+                    )
+                )
+                trace.add_note(
+                    "correction",
+                    "The reviewer's correction and the independent derivation "
+                    "disagree on the corrected value; both are reported.",
+                )
+            return candidate
+
+        trace.add_note(
+            "correction",
+            "The reviewer's correction returns the original number, so it "
+            "repairs nothing; using the independently derived query instead.",
+        )
     return recompute.sql or candidate
 
 
