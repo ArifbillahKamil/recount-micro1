@@ -1,183 +1,266 @@
-# Solution video — script and shot list
+# Solution video — read this and record
 
-Target 4:30, hard ceiling 5:00. Screen recording with voice over. No slides
-except the two tables; the terminal is the demo.
+You do not need to know anything about video. One terminal window, a screen
+recorder, and `demo.py` doing the work. Target 4:40, hard ceiling 5:00.
 
-Record with the repository freshly cloned and `python run_all.py --dry-run`
-already done, so `data/warehouse.db` exists. Everything below runs `--offline`,
-so nothing depends on the network mid-recording and nothing costs anything.
-
-All figures below are the recorded ones from `runs/` on `gpt-4o-mini`. If you
-re-record the evaluation with a different model, refresh them from
-`runs/main-<model>/results.md`.
+Everything runs offline against committed cassettes: no network, no spending, no
+chance of a failed command mid-take.
 
 ---
 
-## 0:00 – 0:45 · The problem
+## Before you record
 
-**On screen:** a terminal, nothing else. Type this and let it run.
+**1. Warm it up.** Run once so nothing is cold and you know every beat works:
 
-```bash
-python -m recount.cli --case B1 --offline --baseline
+```powershell
+python demo.py --check
 ```
 
-While it runs, say:
+Ends with `All beats ran. Safe to record.` If it does not, stop and say so.
 
-> Every BI tool now has "ask your data a question". An LLM writes the SQL, the
-> query runs, a number comes back. Here's the thing nobody checks: a wrong SQL
-> query doesn't fail. It returns.
+**2. Make the terminal readable.** Judges watch in a small window.
 
-**On screen:** the baseline's verdict appears. Scroll to the reported figure.
+- Font size **18pt or larger**
+- Maximise the window, close other tabs
+- Light-on-dark is fine; just be consistent
 
-> This query joins orders to order_items and to payments at the same time.
-> order_items holds about two rows per order, so every payment gets counted once
-> per line item. It reports 14.2 billion. The real figure is 5.4 billion.
-> Overstated 2.6 times, no error, no warning. That number goes in a board deck.
+**3. Pick a recorder.**
 
-## 0:45 – 1:15 · The baseline
+| tool | notes |
+|---|---|
+| **OBS Studio** | free, records screen + mic, works everywhere |
+| **Windows Game Bar** | already installed — `Win + G`, then record. Simplest option |
+| ScreenPal / Loom | browser-based, records and hosts in one step |
 
-> So the obvious thing is to ask a model to review the SQL. That's the baseline:
-> the schema, the question, the query, one prompt. It's a reasonable first
-> attempt, and on twelve cases it scores 93% F1.
+**4. Choose how you narrate.** Two honest options — pick whichever you will
+actually finish.
 
-**On screen:** highlight the baseline row of the comparison table.
+- **Path A — speak.** Read the lines below. Short sentences, written to be said
+  out loud, not read.
+- **Path B — no voice.** Record silently and put a text card between beats. The
+  card text is given for each beat. This is a legitimate format and it removes
+  all the speaking pressure. Slightly weaker than narration, far better than no
+  video.
 
-> It also declared this one correct.
+---
 
-**On screen:**
+## Recording it
 
-```bash
-python -m recount.cli --case B2 --offline --baseline
+Run this and leave it open:
+
+```powershell
+python demo.py
 ```
 
-> Units sold, overstated 22% by a fan-out through payments. Plausible number, no
-> error, waved through. That is the failure that matters — not a crash, a
-> confident wrong answer.
+It prints a numbered banner, runs one command, then waits for **Enter**. So the
+loop is: read the line → press Enter → read the next line. If you stumble, pause,
+breathe, and say the sentence again — you will cut the bad take out, or just leave
+it. Judges are watching for the work, not for polish.
 
-## 1:15 – 2:45 · One execution, start to finish
+---
 
-**On screen:**
+### Beat 1 — The problem · ~50s
 
-```bash
-python -m recount.cli --case B1 --offline
-```
+**Say:**
 
-Narrate the stages as they scroll past. Then open the trajectory to show the
-mechanism:
-
-```bash
-python -m recount.cli --case B1 --offline --trace-dir /tmp/t
-code /tmp/t/recount__adhoc.md      # or `less`
-```
-
-> Recount doesn't reason about the SQL. It measures the warehouse — grain, real
-> NULL counts, join cardinality, no model involved. Then it does the thing the
-> project is named after: it answers the question from scratch.
-
-**On screen:** scroll to the `model · recompute` event. Pause on it.
-
-> Note what is *missing* from this prompt. It never sees the query under review.
-> That's deliberate — a reviewer shown the original reproduces its mistakes.
-
-**On screen:** scroll to the `gate` event.
-
-> Both queries run. The numbers are compared. Disagree, and the reported figure
-> is not usable, and the gap is the magnitude. Agree, and two independent
-> derivations concur, so a bug claim gets withdrawn.
-
-**On screen:** back to the report output. Point at the corrected query.
-
-> And the analyst gets a runnable fix, not a warning. Every figure in that report
-> came from a query you can re-run.
-
-**On screen:** the hard case.
-
-```bash
-python -m recount.cli --case C2 --offline
-```
-
-> This one is surface-identical to the first — orders joined to order_items, then
-> aggregated. But the question asks for units sold, which genuinely lives at line
-> item grain, so the query is correct. Four of the twelve cases are correct
-> queries, and three of those are shaped to look wrong. Without them you can't
-> measure crying wolf, and a reviewer that flags everything scores perfect recall
-> while being useless.
-
-## 2:45 – 3:30 · The comparison
-
-**On screen:** `runs/main-<model>/results.md`, headline table.
-
-> Same twelve cases, same model, same temperature, same output contract, scored
-> by the same code. The only difference is the measured facts, the recomputation
-> and the gate.
-
-Say the honest version:
-
-> Recall goes from 88% to 100% — every planted fault caught, including the one
-> the baseline waved through. F1 is 94% against 93%. I'm not going to oversell
-> that: one point on twelve cases is a single case, which is inside the noise.
-> The recall difference is the claim I'll defend. And it isn't free — Recount
-> raises one false alarm the baseline doesn't, and costs about twice as much.
-
-**On screen:**
-
-```bash
-python -m recount.evaluate --system both --offline
-```
-
-> And this is the part I'd want as a judge. No API key. Every model response is
-> committed, so you replay the exact run and get the same table, for nothing.
-
-## 3:30 – 4:30 · The changelog
-
-**On screen:** `runs/changelog-table.md`.
-
-> Four stages, each switched off in turn. That's how you find out what actually
-> helped instead of assuming.
-
-> The one that earned its place is the recomputation. Remove it and F1 drops
-> from 94 to 67, and recall halves to 50%. Everything else I built either did
-> nothing or made things worse.
-
-> The verification gate — the mechanism I described as the load-bearing idea in
-> my own README — never fired. The no-gate run is identical to the reported one,
-> on every metric. Twice, across two rewrites. Its measured contribution is
-> zero. I kept it because it makes "the model followed the evidence" a guarantee
-> rather than an observation, and the tests show it overruling verdicts in both
-> directions — but I'm not going to call that an improvement.
-
-> Three experiments I removed. The probe loop: agent writes hypotheses, runs
-> diagnostic queries. Identical results at two and a quarter times the cost.
-> The profiler: took F1 from 94 down to 84. And format hints, which fixed my
-> last false alarm and cost me a detection doing it — recall fell back to 88%
-> and the whole system became indistinguishable from the baseline.
-
-## 4:30 – 5:00 · The hot take
-
-**On screen:** the trajectory for `C4`, on the `'2026-01-01T00:00:00Z'` line.
-
-> Last thing, because it changed how I think. My deterministic profiler measures
-> fan-out exactly and can't hallucinate. It made the system worse.
+> Every BI tool now has "ask your data a question". A model writes the SQL, the
+> query runs, a number comes back.
 >
-> Not because the facts were wrong. Because I gave them to the wrong role. Tell a
-> model "order_items fans out 2.16x" while it's *judging* a query and it helps.
-> Tell it the same thing while it's *writing* one and it turns defensive, adds
-> DISTINCTs it doesn't need, and gets the answer wrong. Withhold the profile and
-> it breaks differently — here it wrote an ISO timestamp against a column stored
-> with a space, dropped a day, and reported a correct query as broken.
+> Here is the thing nobody checks. A wrong SQL query does not fail. It returns.
+>
+> This is the obvious defence: show a model the schema and the query, and ask if
+> it is right.
+
+*(press Enter — the baseline verdict appears)*
+
+> It says the number holds. Three thousand six hundred and forty-eight units.
+>
+> The real answer is two thousand nine hundred and ninety-three. This query joins
+> through the payments table, and installment orders have several payment rows, so
+> every line item gets counted more than once. Overstated twenty-two percent.
+>
+> No error. No warning. And read that explanation — it is fluent, specific, and
+> completely wrong. That is the failure that matters.
+
+**Card (Path B):** `A wrong SQL query does not fail. It returns.` then
+`Reviewer: "the number holds" — 3,648 units. Truth: 2,993. Overstated 22%.`
+
+---
+
+### Beat 2 — The same query, verified · ~45s
+
+**Say:**
+
+> Same query, through Recount.
+
+*(Enter)*
+
+> It reports the overstatement, the true figure, and the size of the gap. Then it
+> hands over a corrected query you can run.
+>
+> Not a warning. A fix. And every number in that report came from SQL that was
+> actually executed.
+
+**Card:** `Recount: overstated 1.22x, +655 units — with a runnable fix.`
+
+---
+
+### Beat 3 — How it works · ~55s
+
+**Say:**
+
+> Recount does not read the SQL and form an opinion. It answers the question
+> again, from scratch.
+>
+> This is the entire prompt that step receives.
+
+*(Enter)*
+
+> Look at what is missing. The query being checked is not in there. That is
+> deliberate — a reviewer shown a faulty query tends to repeat its mistake.
+>
+> So it derives its own answer, that query gets executed too, and the two numbers
+> are compared. Different numbers mean the reported figure cannot be used, and the
+> gap is the magnitude. Same numbers mean two independent derivations agree.
+>
+> The decision is a diff between two executed queries. Not a judgement about
+> which explanation sounds better.
+
+**Card:** `The recomputation never sees the query it is checking.` then
+`Two derivations. Both executed. Compare the numbers.`
+
+---
+
+### Beat 4 — The hard case · ~40s
+
+**Say:**
+
+> Now the case that makes this hard.
+
+*(Enter — two queries appear side by side)*
+
+> Both join orders to order items and then aggregate. Same shape. One is broken,
+> one is perfectly correct — because this one asks for units sold, and units
+> really do live at line-item grain.
+>
+> You cannot tell them apart from the SQL. Only the question separates them.
+
+*(Enter — C2 runs)*
+
+> Recount clears it. Four of my twelve cases are correct queries, and three are
+> shaped to look wrong. Without those you cannot measure crying wolf, and a
+> reviewer that flags everything scores perfect recall while being useless.
+
+**Card:** `Same SQL shape. One broken, one correct.` then
+`4 of 12 cases are correct queries. 3 are shaped to look wrong.`
+
+---
+
+### Beat 5 — Where it fails · ~25s
+
+**Say:**
+
+> And here is where Recount is wrong.
+
+*(Enter)*
+
+> This query is correct and it flags it anyway. One false alarm in four correct
+> queries. The baseline has none. That is a real cost and I am not hiding it.
+
+**Card:** `Recount's own false alarm: 1 of 4 correct queries. The baseline: 0.`
+
+---
+
+### Beat 6 — The comparison · ~45s
+
+**Say:**
+
+> Twelve cases. Same model, same temperature, same output contract, scored by the
+> same code. The only difference is the recomputation.
+
+*(Enter)*
+
+> Recall goes from eighty-eight percent to one hundred. Every planted fault
+> caught, including the one the reviewer waved through.
+>
+> F1 is ninety-four against ninety-three. I am not going to oversell that. One
+> point on twelve cases is a single case — that is inside the noise. Recall is the
+> claim I will defend. And it costs twice as much, and raises that false alarm.
+
+**Card:** `Recall 88% → 100%. F1 93% → 94% — one case, inside the noise.`
+then `Cost: 2x. False alarms: +1.`
+
+---
+
+### Beat 7 — Reproducible · ~25s
+
+**Say:**
+
+> This part I would want as a judge. No API key in this shell. No network call.
+
+*(Enter)*
+
+> Every model response is committed, so you replay the exact run and get the same
+> table, for nothing. Verified from a clean clone in three different timezones.
+
+**Card:** `No API key. No network. Same numbers.`
+
+---
+
+### Beat 8 — What each component was worth · ~45s
+
+**Say:**
+
+> Last thing, and it is the part I would want to be asked about.
+
+*(Enter)*
+
+> Four stages. Each one switched off in turn. Three of them I deleted, because
+> their own numbers said to.
+>
+> The verification gate — which an earlier version of my own README called the
+> load-bearing idea — returns results identical to the final configuration. Twice,
+> across two rewrites. Its measured contribution is zero.
+>
+> The probe loop: identical results at more than double the cost. Deleted.
+>
+> And my deterministic profiler, the component I was proudest of. It made things
+> worse. Not because the facts were wrong — because I gave them to the wrong role.
+
+**Card:** `Three of four stages deleted by their own measurements.` then
+`Remove the recomputation: F1 94% → 55%.`
+
+---
+
+### Closing — the hot take · ~30s
+
+Nothing to run. Just say it.
+
+> Told "status must handle NULL explicitly", the author wrote
+> `WHERE status IS NOT NULL` where the question required
+> `WHERE status = 'completed'`. It did not add a filter. It replaced the required
+> one. A hazard you name to an agent becomes the thing it optimises for, and it
+> competes with the task.
 >
 > So: don't ask an agent to be careful. Make its claim executable, and give each
-> role only the context its job needs. Confidence is not a signal. A number you
-> can diff is.
+> role only the context its own job needs. Confidence is not a signal. A number
+> you can diff is.
+
+**Card:** `Don't ask an agent to be careful. Make its claim executable.`
 
 ---
 
-## Recording notes
+## After recording
 
-- Terminal at 16–18pt. Judges watch this in a small window.
-- Pre-run every command once so nothing is cold.
-- Don't read the tables aloud line by line. Point, state the one number that
-  matters, move on.
-- Do not skip the honest framing at 3:00. A reviewer who spots an oversold
-  one-case delta stops trusting the rest of the submission.
-- `--offline` everywhere: no network, no spend, no surprises mid-take.
+1. **Upload and get a URL.** YouTube unlisted is safest. Google Drive works if you
+   set sharing to **Anyone with the link** — otherwise judges get a 403.
+2. **Open the URL in an incognito window.** If it asks for a login, fix it. A
+   video nobody can open is a deliverable you did not submit.
+3. Paste the URL into the HackerEarth form. Title, description and the source
+   zip are in [SUBMISSION.md](SUBMISSION.md).
+
+## If it runs long
+
+Cut in this order — beat 5, then beat 7, then trim beat 4. Never cut the honest
+framing in beat 6; a reviewer who notices an oversold number stops trusting
+everything else.
