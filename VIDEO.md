@@ -46,7 +46,16 @@ actually finish.
 
 ## Recording it
 
-Run this and leave it open:
+**Get the lines.** The script lives in `demo.py`, so it cannot drift from the
+beats:
+
+```powershell
+python demo.py --script     # every line, all nine beats, ~4:32
+python demo.py --cue 3      # one beat, while you rehearse it
+```
+
+Put that on a phone or a second screen, off camera. Then run this and leave it
+open:
 
 ```powershell
 python demo.py
